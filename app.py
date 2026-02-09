@@ -267,13 +267,21 @@ def run_committee_analysis(
     def on_status(msg: str):
         status_messages.append(msg)
         if "Phase 1" in msg:
-            progress(0.2, desc="Analysts + Macro working...")
+            progress(0.15, desc="⏳ Phase 1/3 — Analysts + Macro analyzing in parallel...")
+        elif "Bull case:" in msg:
+            progress(0.35, desc="✅ Phase 1 complete — initial scores in")
         elif "Phase 2" in msg:
-            progress(0.5, desc="Debate in progress...")
+            progress(0.40, desc="⚔️ Phase 2/3 — Adversarial debate starting...")
+        elif "Debate round" in msg:
+            progress(0.50, desc=f"⚔️ {msg.strip()}")
+        elif "Debate complete" in msg:
+            progress(0.65, desc="✅ Debate complete — scores revised")
         elif "Phase 3" in msg:
-            progress(0.8, desc="PM synthesizing...")
+            progress(0.70, desc="🧠 Phase 3/3 — Portfolio Manager synthesizing...")
+        elif "Decision:" in msg:
+            progress(0.90, desc="📋 Decision reached — formatting report...")
         elif "Committee complete" in msg:
-            progress(1.0, desc="Complete!")
+            progress(1.0, desc="✅ Committee complete!")
 
     try:
         # Initialize model and committee
@@ -1085,12 +1093,13 @@ def build_ui() -> gr.Blocks:
                 download_btn = gr.Button("📥 Download Report (.md)", size="sm")
                 download_output = gr.File(label="Download", visible=False)
 
-        # Wire up the main analysis
+        # Wire up the main analysis (show_progress ensures visible progress bar on HF Spaces)
         run_btn.click(
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input],
             outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
                      conviction_output, trace_output, status_output, report_path_state],
+            show_progress="full",
         )
 
         # Copy button — show textbox with full report

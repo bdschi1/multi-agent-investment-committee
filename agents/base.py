@@ -2,14 +2,20 @@
 Base agent protocol for the Investment Committee.
 
 Every agent follows a structured reasoning loop:
-    think → plan → act → reflect
+    think → plan → [execute_tools] → act → reflect
 
-This ensures transparent, auditable reasoning chains — not just
-prompt-in / answer-out black boxes.
+v2 adds dynamic tool calling: agents can request data tools
+during plan() via a TOOL_CALLS: block. The base class parses
+the block, executes tools via ToolRegistry, and passes results
+to act(). If no tools are requested (or no registry is provided),
+the loop behaves identically to v1.
 """
 
 from __future__ import annotations
 
+import ast
+import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -17,6 +23,8 @@ from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +209,100 @@ class Rebuttal(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Tool call parsing
+# ---------------------------------------------------------------------------
+
+# Matches lines like: - get_earnings_history(ticker="NVDA")
+_TOOL_CALL_PATTERN = re.compile(r'^-\s+(\w+)\((.+)\)\s*$', re.MULTILINE)
+
+
+def parse_tool_calls(plan_output: str) -> list[dict[str, Any]]:
+    """
+    Parse TOOL_CALLS: block from an agent's plan output.
+
+    Expected format at end of plan text:
+        TOOL_CALLS:
+        - get_earnings_history(ticker="NVDA")
+        - compare_peers(ticker="NVDA")
+
+    Returns:
+        List of {"tool_name": str, "kwargs": dict} dicts.
+        Empty list if no TOOL_CALLS block found.
+    """
+    # Find the TOOL_CALLS: block
+    marker = "TOOL_CALLS:"
+    idx = plan_output.find(marker)
+    if idx == -1:
+        return []
+
+    tool_section = plan_output[idx + len(marker):]
+    calls = []
+
+    for match in _TOOL_CALL_PATTERN.finditer(tool_section):
+        tool_name = match.group(1)
+        args_str = match.group(2).strip()
+
+        # Parse kwargs: convert "key=value, key2=value2" to dict
+        kwargs = _parse_kwargs(args_str)
+        calls.append({"tool_name": tool_name, "kwargs": kwargs})
+
+    return calls
+
+
+def _parse_kwargs(args_str: str) -> dict[str, Any]:
+    """
+    Parse key=value kwargs string into a dict.
+
+    Handles: ticker="NVDA", max_peers=3, flag=True
+    Uses ast.literal_eval for each value to preserve types (int, bool, etc).
+    """
+    kwargs: dict[str, Any] = {}
+    # Split on commas, but be careful with quoted strings containing commas
+    parts = _smart_split(args_str)
+    for part in parts:
+        part = part.strip()
+        if "=" not in part:
+            continue
+        key, value_str = part.split("=", 1)
+        key = key.strip()
+        value_str = value_str.strip()
+        try:
+            # ast.literal_eval handles strings, ints, floats, bools, None, lists, dicts
+            kwargs[key] = ast.literal_eval(value_str)
+        except (ValueError, SyntaxError):
+            # Last resort: treat as plain string
+            kwargs[key] = value_str.strip('"').strip("'")
+    return kwargs
+
+
+def _smart_split(s: str) -> list[str]:
+    """Split on commas that aren't inside quotes."""
+    parts = []
+    current = []
+    in_quote = False
+    quote_char = None
+
+    for ch in s:
+        if ch in ('"', "'") and not in_quote:
+            in_quote = True
+            quote_char = ch
+            current.append(ch)
+        elif ch == quote_char and in_quote:
+            in_quote = False
+            quote_char = None
+            current.append(ch)
+        elif ch == ',' and not in_quote:
+            parts.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+
+    if current:
+        parts.append(''.join(current))
+    return parts
+
+
+# ---------------------------------------------------------------------------
 # Base Agent ABC
 # ---------------------------------------------------------------------------
 
@@ -208,13 +310,16 @@ class BaseInvestmentAgent(ABC):
     """
     Abstract base class for all investment committee agents.
 
-    Implements the think → plan → act → reflect reasoning loop.
+    Implements the think → plan → [execute_tools] → act → reflect reasoning loop.
     Subclasses implement the domain-specific logic for each step.
+
+    v2: Optional tool_registry enables dynamic tool calling between plan and act.
     """
 
-    def __init__(self, model: Any, role: AgentRole):
+    def __init__(self, model: Any, role: AgentRole, tool_registry: Any = None):
         self.model = model
         self.role = role
+        self.tool_registry = tool_registry
         self.trace: Optional[ReasoningTrace] = None
 
     def _start_trace(self, ticker: str) -> ReasoningTrace:
@@ -241,9 +346,58 @@ class BaseInvestmentAgent(ABC):
             self.trace.add_step(step)
         return step
 
+    def execute_tools(self, plan_output: str) -> dict[str, Any]:
+        """
+        Parse TOOL_CALLS block from plan output and execute requested tools.
+
+        Uses the tool_registry for lookup and budget enforcement.
+
+        Args:
+            plan_output: The raw plan text from the agent's plan() step.
+
+        Returns:
+            {"tool_results": {tool_name: result, ...}, "tools_called": [...]}
+            Empty dict if no tools requested or no registry available.
+        """
+        if not self.tool_registry:
+            return {"tool_results": {}, "tools_called": []}
+
+        calls = parse_tool_calls(plan_output)
+        if not calls:
+            return {"tool_results": {}, "tools_called": []}
+
+        agent_id = self.role.value
+        tool_results: dict[str, Any] = {}
+        tools_called: list[str] = []
+
+        for call in calls:
+            tool_name = call["tool_name"]
+            kwargs = call["kwargs"]
+
+            logger.info(f"[{agent_id}] Executing tool: {tool_name}({kwargs})")
+            result = self.tool_registry.execute(agent_id, tool_name, kwargs)
+            tool_results[tool_name] = result
+            tools_called.append(tool_name)
+
+            # Stop if budget exceeded (the registry returns error dicts)
+            if isinstance(result, dict) and result.get("skipped"):
+                logger.info(f"[{agent_id}] Tool budget reached, stopping further calls.")
+                break
+
+        return {"tool_results": tool_results, "tools_called": tools_called}
+
+    def get_tool_catalog(self) -> str:
+        """Get formatted tool catalog for prompt injection. Empty string if no registry."""
+        if not self.tool_registry:
+            return ""
+        return self.tool_registry.get_catalog()
+
     def run(self, ticker: str, context: dict[str, Any]) -> dict[str, Any]:
         """
         Execute the full reasoning loop.
+
+        v2: Inserts execute_tools() between plan and act when tool_registry
+        is available. Tool results are passed to act() as additional context.
 
         Returns a dict containing the agent's output and reasoning trace.
         """
@@ -259,9 +413,24 @@ class BaseInvestmentAgent(ABC):
         plan = self.plan(ticker, context, thinking)
         self._record_step(StepType.PLAN, plan, duration_ms=(time.time() - t0) * 1000)
 
-        # 3. ACT — execute the plan (tool calls, analysis)
+        # 2.5 EXECUTE TOOLS — dynamic tool calling (new in v2)
+        tool_results: dict[str, Any] = {}
+        if self.tool_registry:
+            t0 = time.time()
+            tool_data = self.execute_tools(plan)
+            tool_results = tool_data.get("tool_results", {})
+            tools_called = tool_data.get("tools_called", [])
+            if tools_called:
+                self._record_step(
+                    StepType.TOOL_CALL,
+                    f"Called {len(tools_called)} tools: {', '.join(tools_called)}",
+                    duration_ms=(time.time() - t0) * 1000,
+                    metadata={"tools_called": tools_called, "results_summary": list(tool_results.keys())},
+                )
+
+        # 3. ACT — execute the plan (now with optional tool_results)
         t0 = time.time()
-        result = self.act(ticker, context, plan)
+        result = self.act(ticker, context, plan, tool_results=tool_results)
         self._record_step(StepType.ACT, str(result), duration_ms=(time.time() - t0) * 1000)
 
         # 4. REFLECT — evaluate output quality
@@ -287,7 +456,13 @@ class BaseInvestmentAgent(ABC):
         ...
 
     @abstractmethod
-    def act(self, ticker: str, context: dict[str, Any], plan: str) -> Any:
+    def act(
+        self,
+        ticker: str,
+        context: dict[str, Any],
+        plan: str,
+        tool_results: dict[str, Any] | None = None,
+    ) -> Any:
         """Execute analysis — call tools, compute metrics, build thesis."""
         ...
 

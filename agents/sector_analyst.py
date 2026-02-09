@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 class SectorAnalystAgent(BaseInvestmentAgent):
     """Bull-case agent: builds the affirmative investment thesis."""
 
-    def __init__(self, model: Any):
-        super().__init__(model=model, role=AgentRole.SECTOR_ANALYST)
+    def __init__(self, model: Any, tool_registry: Any = None):
+        super().__init__(model=model, role=AgentRole.SECTOR_ANALYST, tool_registry=tool_registry)
 
     def think(self, ticker: str, context: dict[str, Any]) -> str:
         """Assess what we know and form initial hypotheses about the opportunity."""
@@ -76,6 +76,21 @@ Be specific and analytical. Think like an analyst, not a chatbot."""
 
     def plan(self, ticker: str, context: dict[str, Any], thinking: str) -> str:
         """Plan what analysis to perform based on initial thinking."""
+        tool_catalog = self.get_tool_catalog()
+        tool_section = ""
+        if tool_catalog:
+            tool_section = f"""
+
+AVAILABLE TOOLS (optional — call any that would strengthen your bull case):
+{tool_catalog}
+
+Suggested tools for bull-case analysis: get_earnings_history, compare_peers, get_insider_activity
+
+To request tool data, add a TOOL_CALLS block at the END of your plan:
+TOOL_CALLS:
+- tool_name(ticker="{ticker}")
+"""
+
         prompt = f"""Based on your initial thinking about {ticker}:
 
 {thinking}
@@ -88,13 +103,13 @@ Outline:
 3. What growth drivers will you analyze?
 4. What catalysts will you identify?
 5. How will you score conviction?
-
+{tool_section}
 Be structured and specific. This plan will guide your analysis."""
 
         response = self.model(prompt)
         return response if isinstance(response, str) else str(response)
 
-    def act(self, ticker: str, context: dict[str, Any], plan: str) -> BullCase:
+    def act(self, ticker: str, context: dict[str, Any], plan: str, tool_results: dict[str, Any] | None = None) -> BullCase:
         """Execute the analysis plan and produce the bull case."""
         market_data = context.get("market_data", {})
         news = context.get("news", [])
@@ -108,6 +123,14 @@ EXPERT GUIDANCE (incorporate into your analysis):
 {user_context}
 """
 
+        # Inject dynamic tool results if available
+        tool_data_section = ""
+        if tool_results:
+            tool_data_section = f"""
+ADDITIONAL DATA FROM TOOL CALLS (use this to strengthen your analysis):
+{json.dumps(tool_results, indent=2, default=str)}
+"""
+
         prompt = f"""You are executing your analysis plan for {ticker}. BUILD THE BULL CASE.
 
 Your plan:
@@ -116,8 +139,7 @@ Your plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}
-
+{expert_section}{tool_data_section}
 Produce a STRUCTURED bull case. Include:
 1. Technical analysis: recent price action, trend, momentum, key support/resistance levels
 2. Relative performance: how has this stock performed vs. its sector and the broader market recently?

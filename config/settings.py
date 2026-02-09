@@ -83,12 +83,20 @@ class Settings(BaseSettings):
     # --- Reasoning Parameters ---
     max_debate_rounds: int = Field(default=2, ge=1, le=20, description="Max debate rounds")
     max_tokens_per_agent: int = Field(default=4096, ge=256, description="Token budget per agent")
+    max_tool_calls_per_agent: int = Field(
+        default=5, ge=0, le=20,
+        description="Max dynamic tool calls per agent per run (0 disables tool calling)",
+    )
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature")
 
     # --- Application ---
     log_level: str = Field(default="INFO", description="Logging level")
     enable_reasoning_trace: bool = Field(
         default=True, description="Capture detailed reasoning traces"
+    )
+    enable_hitl: bool = Field(
+        default=True,
+        description="Enable two-phase human-in-the-loop mode in UI (review before PM synthesis)",
     )
 
     def get_active_model(self) -> str:

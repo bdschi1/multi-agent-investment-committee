@@ -1,13 +1,11 @@
 """
 Investment Committee Orchestrator.
 
-Coordinates the multi-agent workflow:
-    1. Sector Analyst and Risk Manager run in parallel (ThreadPoolExecutor)
-    2. Adversarial debate round (rebuttals)
-    3. Portfolio Manager synthesizes and decides
+v2: Delegates to a LangGraph StateGraph (orchestrator/graph.py) for
+conditional routing, parallel fan-out via Send, and a debate loop
+with convergence checking.
 
-This is the core orchestration engine that demonstrates multi-agent
-reasoning — not just sequential prompting.
+v1 implementation preserved as run_v1() for comparison/fallback.
 """
 
 from __future__ import annotations
@@ -123,6 +121,9 @@ class InvestmentCommittee:
         """
         Run the full investment committee process.
 
+        v2: Delegates to the LangGraph StateGraph while preserving
+        the exact same interface and return type as v1.
+
         Args:
             ticker: Stock ticker to analyze
             context: Additional context (market_data, news, user_context, etc.)
@@ -130,6 +131,29 @@ class InvestmentCommittee:
 
         Returns:
             CommitteeResult with all analyses, debate, and final memo
+        """
+        from orchestrator.graph import run_graph
+
+        context = context or {}
+
+        return run_graph(
+            ticker=ticker,
+            context=context,
+            model=self.model,
+            max_debate_rounds=settings.max_debate_rounds,
+            on_status=on_status,
+        )
+
+    def run_v1(
+        self,
+        ticker: str,
+        context: dict[str, Any] | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ) -> CommitteeResult:
+        """
+        Original ThreadPoolExecutor implementation — kept for fallback/comparison.
+
+        This is the v1 body that was replaced by run_graph() in v2.
         """
         context = context or {}
         result = CommitteeResult(ticker=ticker)

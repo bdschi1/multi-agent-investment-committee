@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 class RiskManagerAgent(BaseInvestmentAgent):
     """Bear-case agent: adversarial risk analysis with cascading effects."""
 
-    def __init__(self, model: Any):
-        super().__init__(model=model, role=AgentRole.RISK_MANAGER)
+    def __init__(self, model: Any, tool_registry: Any = None):
+        super().__init__(model=model, role=AgentRole.RISK_MANAGER, tool_registry=tool_registry)
 
     def think(self, ticker: str, context: dict[str, Any]) -> str:
         """Identify initial risk vectors and areas of concern."""
@@ -82,6 +82,21 @@ Think deeply. Your job is to protect capital, not be optimistic."""
 
     def plan(self, ticker: str, context: dict[str, Any], thinking: str) -> str:
         """Plan the risk analysis approach."""
+        tool_catalog = self.get_tool_catalog()
+        tool_section = ""
+        if tool_catalog:
+            tool_section = f"""
+
+AVAILABLE TOOLS (optional — call any that would strengthen your risk analysis):
+{tool_catalog}
+
+Suggested tools for risk analysis: compare_peers, get_insider_activity, get_price_data_extended
+
+To request tool data, add a TOOL_CALLS block at the END of your plan:
+TOOL_CALLS:
+- tool_name(ticker="{ticker}")
+"""
+
         prompt = f"""Based on your initial risk thinking about {ticker}:
 
 {thinking}
@@ -93,7 +108,7 @@ Now PLAN your risk analysis. Specifically:
 3. For the most severe 2nd-order effects, what 3rd-order cascades do you see?
 4. What data would help you quantify these risks?
 5. How will you score overall risk (your framework)?
-
+{tool_section}
 Think in CAUSAL CHAINS:
   Primary risk → 2nd order consequence → 3rd order cascade
 
@@ -103,7 +118,7 @@ from simple risk listing."""
         response = self.model(prompt)
         return response if isinstance(response, str) else str(response)
 
-    def act(self, ticker: str, context: dict[str, Any], plan: str) -> BearCase:
+    def act(self, ticker: str, context: dict[str, Any], plan: str, tool_results: dict[str, Any] | None = None) -> BearCase:
         """Execute risk analysis and produce the bear case."""
         market_data = context.get("market_data", {})
         news = context.get("news", [])
@@ -117,6 +132,14 @@ EXPERT GUIDANCE (incorporate into your risk analysis):
 {user_context}
 """
 
+        # Inject dynamic tool results if available
+        tool_data_section = ""
+        if tool_results:
+            tool_data_section = f"""
+ADDITIONAL DATA FROM TOOL CALLS (use this to strengthen your risk analysis):
+{json.dumps(tool_results, indent=2, default=str)}
+"""
+
         prompt = f"""You are executing your risk analysis for {ticker}. BUILD THE BEAR CASE.
 
 Your analysis plan:
@@ -125,7 +148,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}
+{expert_section}{tool_data_section}
 Produce a STRUCTURED bear case. Think in CAUSAL CHAINS for 2nd/3rd order effects.
 
 IMPORTANT: Your output should NOT default to "avoid/no position." If the data supports it,

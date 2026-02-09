@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 class PortfolioManagerAgent(BaseInvestmentAgent):
     """Synthesizer agent: weighs bull vs bear and makes the final call."""
 
-    def __init__(self, model: Any):
-        super().__init__(model=model, role=AgentRole.PORTFOLIO_MANAGER)
+    def __init__(self, model: Any, tool_registry: Any = None):
+        super().__init__(model=model, role=AgentRole.PORTFOLIO_MANAGER, tool_registry=tool_registry)
 
     def think(self, ticker: str, context: dict[str, Any]) -> str:
         """Assess both cases, macro context, and the debate before forming a view."""
@@ -56,6 +56,30 @@ neither analyst fully addressed:
 {user_context}
 """
 
+        # Phase C: PM guidance from HITL review step
+        pm_guidance = context.get('pm_guidance', '').strip()
+        guidance_section = ""
+        if pm_guidance:
+            guidance_section = f"""
+
+COMMITTEE CHAIR GUIDANCE (post-review):
+After reviewing the analyst outputs and debate, the committee chair has
+provided the following direction. You MUST factor this into your final decision:
+{pm_guidance}
+"""
+
+        # Phase C: Prior analyses from session memory
+        prior_analyses = context.get('prior_analyses', [])
+        memory_section = ""
+        if prior_analyses:
+            memory_section = f"""
+
+PRIOR ANALYSES OF {ticker} (from this session):
+{json.dumps(prior_analyses, indent=2, default=str)}
+Consider: how has the investment case evolved? What changed since the last analysis?
+If conviction or recommendation shifted, explain why.
+"""
+
         prompt = f"""You are the Portfolio Manager chairing the investment committee for {ticker}.
 
 You have received:
@@ -75,7 +99,7 @@ MACRO ENVIRONMENT:
 
 DEBATE SUMMARY:
 {json.dumps(debate, indent=2, default=str)}
-{expert_section}
+{expert_section}{guidance_section}{memory_section}
 Now THINK about what you've heard. Consider:
 1. Where do the analyst and risk manager AGREE? (These are likely reliable conclusions)
 2. Where do they DISAGREE? Who has stronger evidence?
@@ -99,6 +123,21 @@ The best trades come from non-consensus views backed by rigorous analysis."""
 
     def plan(self, ticker: str, context: dict[str, Any], thinking: str) -> str:
         """Plan the synthesis and decision framework."""
+        tool_catalog = self.get_tool_catalog()
+        tool_section = ""
+        if tool_catalog:
+            tool_section = f"""
+
+AVAILABLE TOOLS (optional — call any that would help your synthesis):
+{tool_catalog}
+
+Suggested tools for PM synthesis: get_earnings_history, compare_peers
+
+To request tool data, add a TOOL_CALLS block at the END of your plan:
+TOOL_CALLS:
+- tool_name(ticker="{ticker}")
+"""
+
         prompt = f"""Based on your initial thinking about {ticker}:
 
 {thinking}
@@ -109,14 +148,14 @@ PLAN your decision framework:
 3. How will you determine position sizing?
 4. What risk mitigants would you require?
 5. What would make you revisit this decision?
-
+{tool_section}
 Be explicit about your decision framework. Good PMs are transparent about
 how they weigh evidence."""
 
         response = self.model(prompt)
         return response if isinstance(response, str) else str(response)
 
-    def act(self, ticker: str, context: dict[str, Any], plan: str) -> CommitteeMemo:
+    def act(self, ticker: str, context: dict[str, Any], plan: str, tool_results: dict[str, Any] | None = None) -> CommitteeMemo:
         """Synthesize everything into the final committee memo."""
         bull_case = context.get("bull_case", {})
         bear_case = context.get("bear_case", {})
@@ -135,6 +174,35 @@ EXPERT GUIDANCE (factor into your final decision):
 {user_context}
 """
 
+        # Inject dynamic tool results if available
+        tool_data_section = ""
+        if tool_results:
+            tool_data_section = f"""
+ADDITIONAL DATA FROM TOOL CALLS (factor into your synthesis):
+{json.dumps(tool_results, indent=2, default=str)}
+"""
+
+        # Phase C: PM guidance from HITL review step
+        pm_guidance = context.get('pm_guidance', '').strip()
+        guidance_section = ""
+        if pm_guidance:
+            guidance_section = f"""
+COMMITTEE CHAIR GUIDANCE (post-review):
+After reviewing the analyst outputs and debate, the committee chair has
+provided the following direction. You MUST factor this into your final decision:
+{pm_guidance}
+"""
+
+        # Phase C: Prior analyses from session memory
+        prior_analyses = context.get('prior_analyses', [])
+        memory_section = ""
+        if prior_analyses:
+            memory_section = f"""
+PRIOR ANALYSES OF {ticker} (from this session):
+{json.dumps(prior_analyses, indent=2, default=str)}
+Consider: how has the investment case evolved? What changed since the last analysis?
+"""
+
         prompt = f"""You are the Portfolio Manager making the FINAL DECISION on {ticker}.
 
 Your decision framework:
@@ -144,7 +212,7 @@ BULL CASE: {json.dumps(bull_data, indent=2, default=str)}
 BEAR CASE: {json.dumps(bear_data, indent=2, default=str)}
 MACRO ENVIRONMENT: {json.dumps(macro_data, indent=2, default=str)}
 DEBATE: {json.dumps(debate, indent=2, default=str)}
-{expert_section}
+{expert_section}{tool_data_section}{guidance_section}{memory_section}
 IMPORTANT: Factor in the macro environment. Consider:
 - Does the economic cycle favor or hinder this stock?
 - Does the rate trajectory support or pressure the thesis?

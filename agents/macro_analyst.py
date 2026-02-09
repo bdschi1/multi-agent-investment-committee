@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 class MacroAnalystAgent(BaseInvestmentAgent):
     """Top-down macro agent: economic cycle, rates, sector rotation, geopolitical."""
 
-    def __init__(self, model: Any):
-        super().__init__(model=model, role=AgentRole.MACRO_ANALYST)
+    def __init__(self, model: Any, tool_registry: Any = None):
+        super().__init__(model=model, role=AgentRole.MACRO_ANALYST, tool_registry=tool_registry)
 
     def think(self, ticker: str, context: dict[str, Any]) -> str:
         """Assess the macro landscape and form initial hypotheses."""
@@ -84,6 +84,21 @@ especially at inflection points."""
 
     def plan(self, ticker: str, context: dict[str, Any], thinking: str) -> str:
         """Plan the macro analysis approach."""
+        tool_catalog = self.get_tool_catalog()
+        tool_section = ""
+        if tool_catalog:
+            tool_section = f"""
+
+AVAILABLE TOOLS (optional — call any that would add macro context):
+{tool_catalog}
+
+Suggested tools for macro analysis: get_price_data_extended
+
+To request tool data, add a TOOL_CALLS block at the END of your plan:
+TOOL_CALLS:
+- tool_name(ticker="{ticker}")
+"""
+
         prompt = f"""Based on your initial macro thinking about {ticker}:
 
 {thinking}
@@ -96,14 +111,14 @@ Now PLAN your macro analysis. Specifically:
 4. How will you determine if the macro is a tailwind or headwind for this name?
 5. What sector rotation dynamics are relevant, and how do you measure them?
 6. What geopolitical risks need quantifying and over what timeframes?
-
+{tool_section}
 Prioritize — not all macro factors are equally relevant for every stock.
 A pharma stock cares less about oil prices than an airline stock."""
 
         response = self.model(prompt)
         return response if isinstance(response, str) else str(response)
 
-    def act(self, ticker: str, context: dict[str, Any], plan: str) -> MacroView:
+    def act(self, ticker: str, context: dict[str, Any], plan: str, tool_results: dict[str, Any] | None = None) -> MacroView:
         """Execute macro analysis and produce the MacroView."""
         market_data = context.get("market_data", {})
         news = context.get("news", [])
@@ -117,6 +132,14 @@ EXPERT GUIDANCE (incorporate into your macro analysis):
 {user_context}
 """
 
+        # Inject dynamic tool results if available
+        tool_data_section = ""
+        if tool_results:
+            tool_data_section = f"""
+ADDITIONAL DATA FROM TOOL CALLS (use this for macro context):
+{json.dumps(tool_results, indent=2, default=str)}
+"""
+
         prompt = f"""You are executing your macro analysis for {ticker}. Provide the TOP-DOWN CONTEXT.
 
 Your analysis plan:
@@ -125,7 +148,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}
+{expert_section}{tool_data_section}
 Produce a STRUCTURED macro view. This is context — not a buy/sell recommendation.
 
 Respond in valid JSON matching this exact schema:

@@ -14,6 +14,10 @@ Supported LLM providers:
 
 Architecture:
     User Input → Data Gathering → Parallel Analysis → Debate → Synthesis → Memo
+
+Phase C adds two execution modes:
+    Full Auto: Single button runs the entire pipeline (backward compatible)
+    Review Before PM: Two-phase HITL — review analyst output, add guidance, then PM decides
 """
 
 from __future__ import annotations
@@ -32,6 +36,8 @@ from config.settings import settings, LLMProvider
 from tools.data_aggregator import DataAggregator
 from orchestrator.committee import InvestmentCommittee, CommitteeResult
 from orchestrator.reasoning_trace import TraceRenderer
+from orchestrator.graph import run_graph_phase1, run_graph_phase2
+from orchestrator.memory import store_analysis, clear_session
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)
@@ -233,7 +239,7 @@ def _log_run(result: CommitteeResult, provider_name: str, model_name: str,
 
 
 # ---------------------------------------------------------------------------
-# Main analysis function
+# Main analysis function — Full Auto mode
 # ---------------------------------------------------------------------------
 
 def run_committee_analysis(
@@ -267,21 +273,21 @@ def run_committee_analysis(
     def on_status(msg: str):
         status_messages.append(msg)
         if "Phase 1" in msg:
-            progress(0.15, desc="⏳ Phase 1/3 — Analysts + Macro analyzing in parallel...")
+            progress(0.15, desc="Phase 1/3 — Analysts + Macro analyzing in parallel...")
         elif "Bull case:" in msg:
-            progress(0.35, desc="✅ Phase 1 complete — initial scores in")
+            progress(0.35, desc="Phase 1 complete — initial scores in")
         elif "Phase 2" in msg:
-            progress(0.40, desc="⚔️ Phase 2/3 — Adversarial debate starting...")
+            progress(0.40, desc="Phase 2/3 — Adversarial debate starting...")
         elif "Debate round" in msg:
-            progress(0.50, desc=f"⚔️ {msg.strip()}")
+            progress(0.50, desc=f"{msg.strip()}")
         elif "Debate complete" in msg:
-            progress(0.65, desc="✅ Debate complete — scores revised")
+            progress(0.65, desc="Debate complete — scores revised")
         elif "Phase 3" in msg:
-            progress(0.70, desc="🧠 Phase 3/3 — Portfolio Manager synthesizing...")
+            progress(0.70, desc="Phase 3/3 — Portfolio Manager synthesizing...")
         elif "Decision:" in msg:
-            progress(0.90, desc="📋 Decision reached — formatting report...")
+            progress(0.90, desc="Decision reached — formatting report...")
         elif "Committee complete" in msg:
-            progress(1.0, desc="✅ Committee complete!")
+            progress(1.0, desc="Committee complete!")
 
     try:
         # Initialize model and committee
@@ -295,6 +301,9 @@ def run_committee_analysis(
 
         # Run the committee (synchronous — parallel via ThreadPoolExecutor internally)
         result: CommitteeResult = committee.run(ticker, context, on_status=on_status)
+
+        # Store in session memory for future reference
+        store_analysis(ticker, result)
 
         # Determine model used
         model_map = {
@@ -343,6 +352,276 @@ def run_committee_analysis(
     finally:
         # Restore original debate rounds
         settings.max_debate_rounds = original_rounds
+
+
+# ---------------------------------------------------------------------------
+# HITL Phase 1: Run analysts + debate, return previews
+# ---------------------------------------------------------------------------
+
+def run_phase1_analysis(
+    ticker: str,
+    user_context: str,
+    provider_name: str,
+    debate_rounds: int,
+    progress: gr.Progress = gr.Progress(),
+) -> tuple[Any, str, str, str, str, str]:
+    """
+    Run Phase 1 (analysts + debate) and return intermediate previews.
+
+    Returns: (intermediate_state, bull_preview, bear_preview, macro_preview,
+              debate_preview, status_msg)
+    """
+    if not ticker or not ticker.strip():
+        return None, "Please enter a ticker symbol.", "", "", "", ""
+
+    ticker = ticker.strip().upper()
+    status_messages = []
+
+    provider = PROVIDER_DISPLAY.get(provider_name, settings.llm_provider)
+
+    original_rounds = settings.max_debate_rounds
+    settings.max_debate_rounds = debate_rounds
+
+    def on_status(msg: str):
+        status_messages.append(msg)
+        if "Phase 1" in msg:
+            progress(0.15, desc="Phase 1 — Analysts analyzing in parallel...")
+        elif "Bull case:" in msg:
+            progress(0.50, desc="Phase 1 complete — initial scores in")
+        elif "Phase 2" in msg:
+            progress(0.55, desc="Phase 2 — Adversarial debate...")
+        elif "Debate round" in msg:
+            progress(0.70, desc=f"{msg.strip()}")
+        elif "Debate complete" in msg or "Debate SKIPPED" in msg:
+            progress(1.0, desc="Analysis complete — ready for review")
+
+    try:
+        progress(0.05, desc=f"Initializing {provider_name}...")
+        model = create_model(provider)
+
+        progress(0.1, desc=f"Gathering market data for {ticker}...")
+        context = DataAggregator.gather_context(ticker, user_context)
+
+        intermediate_state = run_graph_phase1(
+            ticker=ticker,
+            context=context,
+            model=model,
+            max_debate_rounds=debate_rounds,
+            on_status=on_status,
+        )
+
+        # Build previews from intermediate state
+        bull_preview = _format_bull_preview(intermediate_state)
+        bear_preview = _format_bear_preview(intermediate_state)
+        macro_preview = _format_macro_preview(intermediate_state)
+        debate_preview = _format_debate_preview(intermediate_state)
+
+        status_msg = (
+            f"**Phase 1 complete for {ticker}.**\n\n"
+            f"Review the analyst outputs below, then optionally add PM guidance "
+            f"before clicking **Finalize Decision**."
+        )
+
+        return intermediate_state, bull_preview, bear_preview, macro_preview, debate_preview, status_msg
+
+    except Exception as e:
+        logger.exception(f"Phase 1 failed for {ticker}")
+        error_msg = f"## Error\n\n**Error:** {str(e)}"
+        return None, error_msg, "", "", "", f"Error: {str(e)}"
+    finally:
+        settings.max_debate_rounds = original_rounds
+
+
+# ---------------------------------------------------------------------------
+# HITL Phase 2: PM synthesis with guidance
+# ---------------------------------------------------------------------------
+
+def run_phase2_synthesis(
+    intermediate_state: Any,
+    pm_guidance: str,
+    provider_name: str,
+    progress: gr.Progress = gr.Progress(),
+) -> tuple[str, str, str, str, str, str, str, str, str]:
+    """
+    Run Phase 2 (PM synthesis) and return full formatted results.
+
+    Returns same tuple as run_committee_analysis for output compatibility.
+    """
+    if intermediate_state is None:
+        return (
+            "No Phase 1 results available. Run Phase 1 first.",
+            "", "", "", "", "", "", "", None
+        )
+
+    status_messages = []
+    provider = PROVIDER_DISPLAY.get(provider_name, settings.llm_provider)
+
+    def on_status(msg: str):
+        status_messages.append(msg)
+        if "Phase 3" in msg:
+            progress(0.30, desc="Portfolio Manager synthesizing...")
+        elif "Decision:" in msg:
+            progress(0.80, desc="Decision reached — formatting report...")
+        elif "Committee complete" in msg:
+            progress(1.0, desc="Committee complete!")
+
+    try:
+        progress(0.05, desc=f"Initializing {provider_name} for PM synthesis...")
+        model = create_model(provider)
+
+        progress(0.10, desc="Running Portfolio Manager with guidance...")
+        result = run_graph_phase2(
+            intermediate_state=intermediate_state,
+            model=model,
+            pm_guidance=pm_guidance or "",
+            on_status=on_status,
+        )
+
+        ticker = result.ticker
+
+        # Store in session memory
+        store_analysis(ticker, result)
+
+        # Determine model used
+        model_map = {
+            LLMProvider.ANTHROPIC: settings.anthropic_model,
+            LLMProvider.GOOGLE: settings.google_model,
+            LLMProvider.OPENAI: settings.openai_model,
+            LLMProvider.HUGGINGFACE: settings.hf_model,
+            LLMProvider.OLLAMA: settings.ollama_model,
+        }
+        model_name = model_map.get(provider, "unknown")
+
+        debate_rounds = intermediate_state.get("max_debate_rounds", 2)
+        user_context = intermediate_state.get("context", {}).get("user_context", "")
+        _log_run(result, provider_name, model_name, debate_rounds, user_context)
+
+        # Format all outputs
+        memo_md = _format_committee_memo(result, provider_name)
+        bull_md = _format_bull_case(result)
+        bear_md = _format_bear_case(result)
+        macro_md = _format_macro_view(result)
+        debate_md = _format_debate(result)
+        conviction_md = _format_conviction_evolution(result)
+        trace_md = TraceRenderer.to_gradio_accordion(result.traces)
+        status_md = _format_status(result, status_messages, provider_name)
+
+        full_report = _build_full_report(
+            result, memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md, provider_name
+        )
+
+        export_path = EXPORTS_DIR / f"{ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        with open(export_path, "w") as f:
+            f.write(full_report)
+
+        return memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md, trace_md, status_md, str(export_path)
+
+    except Exception as e:
+        logger.exception(f"Phase 2 failed")
+        error_msg = f"## Error\n\n**Error:** {str(e)}"
+        return error_msg, "", "", "", "", "", "", f"Error: {str(e)}", None
+
+
+# ---------------------------------------------------------------------------
+# HITL Preview formatters (compact previews for the review step)
+# ---------------------------------------------------------------------------
+
+def _format_bull_preview(state: dict) -> str:
+    """Compact preview of bull case for HITL review."""
+    bc = state.get("bull_case")
+    if not bc:
+        return "No bull case available."
+
+    lines = [
+        f"### Bull Case: {bc.ticker}",
+        f"**Conviction:** {bc.conviction_score}/10 | **Horizon:** {bc.time_horizon}",
+        "",
+        f"**Thesis:** {bc.thesis}",
+        "",
+        "**Key Catalysts:**",
+    ]
+    for cat in bc.catalysts[:3]:
+        lines.append(f"- {cat}")
+    if len(bc.catalysts) > 3:
+        lines.append(f"- *...and {len(bc.catalysts) - 3} more*")
+
+    return "\n".join(lines)
+
+
+def _format_bear_preview(state: dict) -> str:
+    """Compact preview of bear case for HITL review."""
+    bc = state.get("bear_case")
+    if not bc:
+        return "No bear case available."
+
+    lines = [
+        f"### Bear Case: {bc.ticker}",
+        f"**Risk Score:** {bc.risk_score}/10 | **Rec:** {bc.actionable_recommendation}",
+        "",
+        "**Top Risks:**",
+    ]
+    for risk in bc.risks[:3]:
+        lines.append(f"- {risk}")
+    if len(bc.risks) > 3:
+        lines.append(f"- *...and {len(bc.risks) - 3} more*")
+
+    if bc.short_thesis:
+        lines.extend(["", f"**Short Thesis:** {bc.short_thesis}"])
+
+    return "\n".join(lines)
+
+
+def _format_macro_preview(state: dict) -> str:
+    """Compact preview of macro view for HITL review."""
+    mv = state.get("macro_view")
+    if not mv:
+        return "No macro analysis available."
+
+    fav = mv.macro_favorability
+    fav_label = "Favorable" if fav >= 7 else "Neutral" if fav >= 4 else "Hostile"
+
+    impact_text = mv.macro_impact_on_stock or ""
+    if len(impact_text) > 200:
+        impact_text = impact_text[:200] + "..."
+
+    lines = [
+        f"### Macro Environment: {mv.ticker}",
+        f"**Favorability:** {fav}/10 ({fav_label})",
+        f"**Cycle:** {mv.economic_cycle_phase} | **Rates:** {mv.rate_environment}",
+        "",
+        f"**Impact:** {impact_text}",
+    ]
+
+    return "\n".join(lines)
+
+
+def _format_debate_preview(state: dict) -> str:
+    """Compact preview of debate results for HITL review."""
+    ar = state.get("analyst_rebuttal")
+    rr = state.get("risk_rebuttal")
+
+    if state.get("debate_skipped"):
+        return "**Debate was skipped** — bull/bear scores converged within threshold."
+
+    lines = ["### Debate Summary"]
+
+    if ar:
+        if ar.revised_conviction is not None:
+            lines.append(f"\n**Analyst revised conviction:** {ar.revised_conviction}/10")
+        if ar.points:
+            lines.append(f"**Key challenges:** {', '.join(ar.points[:2])}")
+        if ar.concessions:
+            lines.append(f"**Concessions:** {', '.join(ar.concessions[:2])}")
+
+    if rr:
+        if rr.revised_conviction is not None:
+            lines.append(f"\n**Risk Mgr revised risk:** {rr.revised_conviction}/10")
+        if rr.points:
+            lines.append(f"**Key challenges:** {', '.join(rr.points[:2])}")
+        if rr.concessions:
+            lines.append(f"**Concessions:** {', '.join(rr.concessions[:2])}")
+
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +964,7 @@ def _format_macro_view(result: CommitteeResult) -> str:
     lines.extend([
         "## Macro Tailwinds vs. Headwinds",
         "",
-        "| 🟢 Tailwinds | 🔴 Headwinds |",
+        "| Tailwinds | Headwinds |",
         "|-------------|-------------|",
     ])
     for i in range(max_rows):
@@ -723,7 +1002,7 @@ def _format_debate(result: CommitteeResult) -> str:
             lines.append(f"{i}. {point}")
         lines.extend(["", "### Concessions", ""])
         for con in ar.concessions:
-            lines.append(f"> ✓ {con}")
+            lines.append(f"> {con}")
         if ar.revised_conviction is not None:
             lines.append(f"\n**Revised Conviction:** {ar.revised_conviction}/10")
         lines.append("")
@@ -740,7 +1019,7 @@ def _format_debate(result: CommitteeResult) -> str:
             lines.append(f"{i}. {point}")
         lines.extend(["", "### Concessions", ""])
         for con in rr.concessions:
-            lines.append(f"> ✓ {con}")
+            lines.append(f"> {con}")
         if rr.revised_conviction is not None:
             lines.append(f"\n**Revised Risk Score:** {rr.revised_conviction}/10")
 
@@ -778,7 +1057,7 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
         "",
     ]
 
-    # ── Data table — no "Type" column, uses Stance instead ──
+    # ── Data table ──
     lines.extend([
         "## Score Timeline",
         "",
@@ -791,26 +1070,21 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
             f"| **{snap.score}/10** | {_what_score_means(snap)} |"
         )
 
-    # ── Visual bar chart — unified bars, color by agent role ──
+    # ── Visual bar chart ──
     lines.extend(["", "## Visual Conviction Map", ""])
 
     bar_width = 30
     for snap in timeline:
         filled = int((snap.score / 10) * bar_width)
         empty = bar_width - filled
-        # Use different chars per agent for visual distinction
         if snap.agent == "Sector Analyst":
-            bar_char = "▓"  # Bull
-            prefix = "🟢"
+            bar_char, prefix = "▓", "🟢"
         elif snap.agent == "Risk Manager":
-            bar_char = "░"  # Bear
-            prefix = "🔴"
+            bar_char, prefix = "░", "🔴"
         elif snap.agent == "Macro Analyst":
-            bar_char = "▒"  # Macro
-            prefix = "🟣"
+            bar_char, prefix = "▒", "🟣"
         else:
-            bar_char = "█"  # PM
-            prefix = "🔵"
+            bar_char, prefix = "█", "🔵"
         bar = bar_char * filled + "·" * empty
         label = f"{snap.agent} ({snap.phase})"
         lines.append(f"```")
@@ -826,36 +1100,33 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
     lines.extend(["", "## How Scores Shifted", ""])
 
     if len(analyst_scores) >= 2:
-        initial = analyst_scores[0].score
-        revised = analyst_scores[-1].score
+        initial, revised = analyst_scores[0].score, analyst_scores[-1].score
         delta = revised - initial
         direction = "more bullish" if delta > 0 else "less bullish" if delta < 0 else "unchanged"
         arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
         lines.append(
-            f"- 🟢 **Sector Analyst (Bull):** {initial}/10 → {revised}/10 "
+            f"- **Sector Analyst (Bull):** {initial}/10 → {revised}/10 "
             f"({arrow} {direction}, shifted {abs(delta):.1f} after debate)"
         )
     elif analyst_scores:
-        lines.append(f"- 🟢 **Sector Analyst (Bull):** {analyst_scores[0].score}/10")
+        lines.append(f"- **Sector Analyst (Bull):** {analyst_scores[0].score}/10")
 
     if len(risk_scores) >= 2:
-        initial = risk_scores[0].score
-        revised = risk_scores[-1].score
+        initial, revised = risk_scores[0].score, risk_scores[-1].score
         delta = revised - initial
         direction = "sees more risk" if delta > 0 else "sees less risk" if delta < 0 else "unchanged"
         arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
         lines.append(
-            f"- 🔴 **Risk Manager (Bear):** {initial}/10 → {revised}/10 "
+            f"- **Risk Manager (Bear):** {initial}/10 → {revised}/10 "
             f"({arrow} {direction}, shifted {abs(delta):.1f} after debate)"
         )
     elif risk_scores:
-        lines.append(f"- 🔴 **Risk Manager (Bear):** {risk_scores[0].score}/10")
+        lines.append(f"- **Risk Manager (Bear):** {risk_scores[0].score}/10")
 
     if macro_scores:
-        lines.append(f"- 🟣 **Macro Analyst:** Favorability {macro_scores[0].score}/10")
-
+        lines.append(f"- **Macro Analyst:** Favorability {macro_scores[0].score}/10")
     if pm_scores:
-        lines.append(f"- 🔵 **Portfolio Manager:** Final conviction {pm_scores[0].score}/10")
+        lines.append(f"- **Portfolio Manager:** Final conviction {pm_scores[0].score}/10")
 
     # ── Interpretation ──
     lines.extend(["", "## Interpretation", ""])
@@ -866,7 +1137,6 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
         macro_fav = macro_scores[0].score if macro_scores else 5.0
         pm_final = pm_scores[0].score
 
-        # Bull-bear spread
         lines.append(
             f"The bull scored **{bull_final}/10** confidence while the bear scored "
             f"**{bear_final}/10** risk severity."
@@ -874,53 +1144,26 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
 
         if macro_scores:
             if macro_fav >= 7:
-                lines.append(
-                    f"\nThe macro backdrop is **favorable** ({macro_fav}/10) — "
-                    f"the economic environment supports the bull case."
-                )
+                lines.append(f"\nThe macro backdrop is **favorable** ({macro_fav}/10).")
             elif macro_fav >= 4:
-                lines.append(
-                    f"\nThe macro backdrop is **neutral** ({macro_fav}/10) — "
-                    f"neither a strong tailwind nor headwind."
-                )
+                lines.append(f"\nThe macro backdrop is **neutral** ({macro_fav}/10).")
             else:
-                lines.append(
-                    f"\nThe macro backdrop is **hostile** ({macro_fav}/10) — "
-                    f"economic conditions are working against this name."
-                )
+                lines.append(f"\nThe macro backdrop is **hostile** ({macro_fav}/10).")
 
         if bull_final > (10 - bear_final):
-            lines.append(
-                "\nBull conviction outweighs the bear's risk assessment — "
-                "the analyst sees more upside potential than the risk manager sees downside."
-            )
+            lines.append("\nBull conviction outweighs the bear's risk assessment.")
         elif bull_final < (10 - bear_final):
-            lines.append(
-                "\nBear risk assessment dominates — the risk manager's concerns "
-                "outweigh the analyst's bullish conviction."
-            )
+            lines.append("\nBear risk assessment dominates.")
         else:
-            lines.append(
-                "\nBull and bear are evenly matched — a true toss-up for the PM to resolve."
-            )
+            lines.append("\nBull and bear are evenly matched.")
 
         if pm_final >= 7:
-            lines.append(
-                f"\nPM sided bullish with **{pm_final}/10** conviction — "
-                f"high confidence in the positive thesis."
-            )
+            lines.append(f"\nPM sided bullish with **{pm_final}/10** conviction.")
         elif pm_final >= 4:
-            lines.append(
-                f"\nPM landed at **{pm_final}/10** — moderate conviction, "
-                f"acknowledging valid points on both sides."
-            )
+            lines.append(f"\nPM landed at **{pm_final}/10** — moderate conviction.")
         else:
-            lines.append(
-                f"\nPM conviction is low at **{pm_final}/10** — "
-                f"the bear case materially impacted the final decision."
-            )
+            lines.append(f"\nPM conviction is low at **{pm_final}/10**.")
 
-    # Legend
     lines.extend([
         "",
         "---",
@@ -937,7 +1180,6 @@ def _format_status(result: CommitteeResult, messages: list[str], provider_name: 
     """Format the status/summary view with tables."""
     stats = TraceRenderer.summary_stats(result.traces)
 
-    # Determine model used
     model_map = {
         LLMProvider.ANTHROPIC: settings.anthropic_model,
         LLMProvider.GOOGLE: settings.google_model,
@@ -982,9 +1224,8 @@ def _format_status(result: CommitteeResult, messages: list[str], provider_name: 
 # ---------------------------------------------------------------------------
 
 def build_ui() -> gr.Blocks:
-    """Build the Gradio interface."""
+    """Build the Gradio interface with Full Auto and Review Before PM modes."""
 
-    # Determine default provider display name
     default_display = PROVIDER_TO_DISPLAY.get(
         settings.llm_provider, "Claude (Anthropic)"
     )
@@ -1000,13 +1241,13 @@ def build_ui() -> gr.Blocks:
 
             **Four AI agents** reason, debate, and synthesize investment theses in real time.
 
-            `Sector Analyst (Bull)` ⚔️ `Risk Manager (Bear)` · `Macro Analyst (Top-Down)` → `Portfolio Manager (Decision)`
+            `Sector Analyst (Bull)` `Risk Manager (Bear)` `Macro Analyst (Top-Down)` `Portfolio Manager (Decision)`
 
             </div>
             """,
         )
 
-        # ── Committee Controls: Ticker + Provider + Debate Rounds ──
+        # ── Committee Controls ──
         with gr.Group():
             with gr.Row():
                 ticker_input = gr.Textbox(
@@ -1031,7 +1272,7 @@ def build_ui() -> gr.Blocks:
                     scale=1,
                 )
 
-        # Expert Guidance + Start button
+        # Expert Guidance
         with gr.Row():
             with gr.Column(scale=5):
                 context_input = gr.Textbox(
@@ -1043,17 +1284,70 @@ def build_ui() -> gr.Blocks:
                     max_lines=2,
                     info="Injected as domain expertise into all four agents' reasoning",
                 )
-            with gr.Column(scale=1, min_width=160):
+
+        # ── Mode selection + Action buttons ──
+        with gr.Row():
+            mode_selector = gr.Radio(
+                choices=["Full Auto", "Review Before PM"],
+                value="Review Before PM" if settings.enable_hitl else "Full Auto",
+                label="Execution Mode",
+                info="Full Auto runs the entire pipeline. Review Before PM lets you review analyst output and guide the PM.",
+                scale=3,
+            )
+            with gr.Column(scale=1, min_width=180):
                 run_btn = gr.Button(
                     "Start Committee Meeting",
                     variant="primary",
                     size="lg",
+                    visible=not settings.enable_hitl,
+                    elem_classes=["start-btn"],
+                )
+                phase1_btn = gr.Button(
+                    "Run Analysts + Debate",
+                    variant="primary",
+                    size="lg",
+                    visible=settings.enable_hitl,
                     elem_classes=["start-btn"],
                 )
 
-        # Hidden state for report export path
-        report_path_state = gr.State(value=None)
+        # ── HITL Review Section ──
+        with gr.Accordion("Review Analyst Outputs", open=True, visible=False) as review_accordion:
+            review_status = gr.Markdown("")
 
+            with gr.Row():
+                with gr.Column():
+                    bull_preview = gr.Markdown(label="Bull Case Preview")
+                with gr.Column():
+                    bear_preview = gr.Markdown(label="Bear Case Preview")
+
+            with gr.Row():
+                with gr.Column():
+                    macro_preview = gr.Markdown(label="Macro Preview")
+                with gr.Column():
+                    debate_preview = gr.Markdown(label="Debate Preview")
+
+            pm_guidance_input = gr.Textbox(
+                label="PM Guidance (optional)",
+                placeholder=(
+                    "Guide the PM's decision: e.g. 'Weight the bear case more heavily, "
+                    "focus on the valuation risk, consider a half position instead of full'"
+                ),
+                max_lines=3,
+                info="This guidance will be injected directly into the PM's reasoning",
+            )
+
+            phase2_btn = gr.Button(
+                "Finalize Decision",
+                variant="primary",
+                size="lg",
+                elem_classes=["start-btn"],
+            )
+
+        # Hidden states
+        report_path_state = gr.State(value=None)
+        intermediate_state = gr.State(value=None)
+
+        # ── Result tabs ──
         with gr.Tabs():
             with gr.TabItem("Committee Memo"):
                 memo_output = gr.Markdown(label="Investment Committee Memo")
@@ -1082,7 +1376,7 @@ def build_ui() -> gr.Blocks:
         # Export section
         with gr.Row():
             with gr.Column(scale=1):
-                copy_btn = gr.Button("📋 Copy Full Report to Clipboard", size="sm")
+                copy_btn = gr.Button("Copy Full Report to Clipboard", size="sm")
                 copy_output = gr.Textbox(
                     label="Full Report (select all + copy)",
                     lines=5,
@@ -1090,10 +1384,25 @@ def build_ui() -> gr.Blocks:
                     visible=False,
                 )
             with gr.Column(scale=1):
-                download_btn = gr.Button("📥 Download Report (.md)", size="sm")
+                download_btn = gr.Button("Download Report (.md)", size="sm")
                 download_output = gr.File(label="Download", visible=False)
 
-        # Wire up the main analysis (show_progress ensures visible progress bar on HF Spaces)
+        # ── Mode switching ──
+        def on_mode_change(mode):
+            is_hitl = (mode == "Review Before PM")
+            return (
+                gr.update(visible=not is_hitl),  # run_btn
+                gr.update(visible=is_hitl),       # phase1_btn
+                gr.update(visible=False),          # review_accordion
+            )
+
+        mode_selector.change(
+            fn=on_mode_change,
+            inputs=[mode_selector],
+            outputs=[run_btn, phase1_btn, review_accordion],
+        )
+
+        # ── Full Auto mode ──
         run_btn.click(
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input],
@@ -1102,9 +1411,45 @@ def build_ui() -> gr.Blocks:
             show_progress="full",
         )
 
-        # Copy button — show textbox with full report
+        # ── HITL Phase 1 ──
+        def handle_phase1(ticker, user_context, provider_name, debate_rounds, progress=gr.Progress()):
+            state, bull_p, bear_p, macro_p, debate_p, status_msg = run_phase1_analysis(
+                ticker, user_context, provider_name, debate_rounds, progress
+            )
+            return (
+                state,
+                bull_p,
+                bear_p,
+                macro_p,
+                debate_p,
+                status_msg,
+                gr.update(visible=True),
+            )
+
+        phase1_btn.click(
+            fn=handle_phase1,
+            inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input],
+            outputs=[intermediate_state, bull_preview, bear_preview,
+                     macro_preview, debate_preview, review_status, review_accordion],
+            show_progress="full",
+        )
+
+        # ── HITL Phase 2 ──
+        def handle_phase2(inter_state, pm_guidance, provider_name, progress=gr.Progress()):
+            results = run_phase2_synthesis(inter_state, pm_guidance, provider_name, progress)
+            return results + (gr.update(visible=False),)
+
+        phase2_btn.click(
+            fn=handle_phase2,
+            inputs=[intermediate_state, pm_guidance_input, provider_dropdown],
+            outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
+                     conviction_output, trace_output, status_output, report_path_state,
+                     review_accordion],
+            show_progress="full",
+        )
+
+        # ── Copy button ──
         def show_report_for_copy(*tab_outputs):
-            """Combine all tab outputs into one copyable text."""
             memo, bull, bear, macro, debate, conviction, trace, status = tab_outputs
             full = "\n\n---\n\n".join([
                 s for s in [memo, bull, bear, macro, debate, conviction, status] if s
@@ -1118,7 +1463,7 @@ def build_ui() -> gr.Blocks:
             outputs=[copy_output],
         )
 
-        # Download button — serve the exported file
+        # ── Download button ──
         def serve_download(path):
             if path and os.path.exists(path):
                 return gr.update(value=path, visible=True)
@@ -1141,6 +1486,9 @@ def build_ui() -> gr.Blocks:
             **Architecture:** Agents follow a structured think → plan → act → reflect loop
             with adversarial debate. See the Reasoning Trace tab to inspect how each agent reasons.
 
+            **Modes:** *Full Auto* runs the entire pipeline in one shot. *Review Before PM* lets you
+            review analyst outputs and add guidance before the Portfolio Manager makes the final call.
+
             **Providers:** Claude (Anthropic) | Gemini (Google) | GPT (OpenAI) | HuggingFace | Ollama (local)
 
             </div>
@@ -1160,7 +1508,7 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
-        inbrowser=True,  # Auto-open browser
+        inbrowser=True,
         theme=gr.themes.Soft(),
         css="""
         .header { text-align: center; margin-bottom: 20px; }

@@ -1,0 +1,58 @@
+# Macro Analyst Agent — Prompt Templates
+# This agent provides top-down economic context (not bull/bear thesis).
+# It runs in Phase 1 parallel with bull/bear but does NOT participate in debate.
+# Output: MacroView schema consumed by the Portfolio Manager for synthesis.
+
+role: macro_analyst
+display_name: "Macro Analyst (Top-Down)"
+description: >
+  Global macro strategist providing economic cycle assessment, rate environment,
+  sector rotation signals, geopolitical risk mapping, and cross-asset signal
+  analysis. This agent is a contextual overlay — it informs but does not debate.
+
+reasoning_loop:
+  - step: think
+    purpose: "Assess the macro landscape and form hypotheses about cycle, rates, rotation"
+    key_dimensions:
+      - "Economic cycle positioning (early expansion / mid-cycle / late cycle / recession)"
+      - "Rate environment (tightening / pausing / easing / QE)"
+      - "Sector rotation dynamics — where is money flowing?"
+      - "Geopolitical risk landscape — trade, sanctions, elections, conflicts"
+      - "Cross-asset signals — bonds, credit, commodities, FX, volatility"
+
+  - step: plan
+    purpose: "Prioritize which macro dimensions matter most for this specific stock"
+    considerations:
+      - "Not all macro matters equally for every stock — pharma vs. airlines vs. tech"
+      - "Which indicators are most relevant to this sector?"
+      - "What cross-asset confirmation/divergence signals to examine"
+
+  - step: act
+    purpose: "Produce structured MacroView JSON"
+    output_schema: MacroView
+    fields:
+      - economic_cycle_phase
+      - cycle_evidence
+      - rate_environment
+      - central_bank_outlook
+      - sector_positioning
+      - rotation_implications
+      - geopolitical_risks
+      - cross_asset_signals (bonds, credit, commodities, fx, volatility)
+      - macro_impact_on_stock
+      - macro_favorability (0-10)
+      - tailwinds
+      - headwinds
+
+  - step: reflect
+    purpose: "Self-critique calibration and uncertainty acknowledgment"
+    checks:
+      - "Is cycle assessment well-calibrated with evidence?"
+      - "Are cross-asset signals internally consistent?"
+      - "Is macro_favorability appropriate for this specific stock?"
+      - "What would a dissenting macro strategist argue?"
+
+debate_participation: false  # Macro provides context, does not debate
+
+api_calls: 4  # think + plan + act + reflect
+wall_clock_impact: "None — runs fully parallel with bull/bear in Phase 1"

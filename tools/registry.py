@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from functools import partial
@@ -118,9 +119,19 @@ class ToolRegistry:
                 "available_tools": self.list_tools(),
             }
 
-        # Execute
+        # Execute — auto-coerce string kwargs that look like JSON dicts/lists
+        # (safety net for edge cases where the parser returns a stringified dict)
         try:
-            result = spec.func(**kwargs)
+            coerced = {}
+            for k, v in kwargs.items():
+                if isinstance(v, str) and v.strip()[:1] in ('{', '['):
+                    try:
+                        coerced[k] = json.loads(v)
+                    except (json.JSONDecodeError, ValueError):
+                        coerced[k] = v
+                else:
+                    coerced[k] = v
+            result = spec.func(**coerced)
             self._call_counts[agent_id] = count + 1
             logger.info(f"Agent {agent_id} called {tool_name} ({count + 1}/{self.max_calls})")
             return result

@@ -58,7 +58,7 @@ class CommitteeState(TypedDict, total=False):
 
     # -- Inputs (set once at graph invocation) --
     ticker: str
-    context: dict[str, Any]                   # DataAggregator output
+    context: dict[str, Any]                   # DataAggregator output (includes user_kb if uploaded)
     max_debate_rounds: int
     on_status: Optional[Callable[[str], None]]
     model: Any                                 # LLM callable(str) -> str
@@ -84,6 +84,9 @@ class CommitteeState(TypedDict, total=False):
 
     # -- Phase 3: PM synthesis --
     committee_memo: Optional[CommitteeMemo]
+
+    # -- Parsing quality (tracks which agents had JSON parsing failures) --
+    parsing_failures: Annotated[list[str], operator.add]
 
     # -- Timing / meta --
     start_time: float

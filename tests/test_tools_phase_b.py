@@ -241,6 +241,112 @@ TOOL_CALLS:
         assert calls[0]["kwargs"]["ticker"] == "NVDA"
         assert calls[0]["kwargs"]["max_peers"] == 3
 
+    def test_parse_dict_kwarg(self):
+        """Should parse a dict-typed kwarg without splitting on internal commas."""
+        plan = """Plan.
+
+TOOL_CALLS:
+- compute_quality_score(fundamentals={"roe": "25.0%", "profit_margin": "20.0%", "debt_to_equity": "0.5"})
+"""
+        calls = parse_tool_calls(plan)
+        assert len(calls) == 1
+        assert calls[0]["tool_name"] == "compute_quality_score"
+        f = calls[0]["kwargs"]["fundamentals"]
+        assert isinstance(f, dict), f"Expected dict, got {type(f).__name__}: {f!r}"
+        assert f["roe"] == "25.0%"
+        assert f["profit_margin"] == "20.0%"
+        assert f["debt_to_equity"] == "0.5"
+
+    def test_parse_dict_kwarg_with_other_args(self):
+        """Should handle a mix of simple args and dict args."""
+        plan = """Plan.
+
+TOOL_CALLS:
+- some_tool(ticker="NVDA", data={"a": 1, "b": 2}, limit=5)
+"""
+        calls = parse_tool_calls(plan)
+        assert len(calls) == 1
+        assert calls[0]["kwargs"]["ticker"] == "NVDA"
+        assert calls[0]["kwargs"]["data"] == {"a": 1, "b": 2}
+        assert calls[0]["kwargs"]["limit"] == 5
+
+
+class TestSmartSplitBraces:
+    """Tests for _smart_split with brace/bracket-containing values."""
+
+    def test_split_respects_braces(self):
+        """Should not split on commas inside curly braces."""
+        from agents.base import _smart_split
+        result = _smart_split('fundamentals={"roe": "25%", "margin": "20%"}')
+        assert len(result) == 1
+        assert result[0] == 'fundamentals={"roe": "25%", "margin": "20%"}'
+
+    def test_split_respects_brackets(self):
+        """Should not split on commas inside square brackets."""
+        from agents.base import _smart_split
+        result = _smart_split('items=["a", "b", "c"], limit=3')
+        assert len(result) == 2
+        assert result[0] == 'items=["a", "b", "c"]'
+        assert result[1].strip() == 'limit=3'
+
+    def test_split_nested_structures(self):
+        """Should handle nested braces/brackets."""
+        from agents.base import _smart_split
+        result = _smart_split('data={"a": [1, 2], "b": {"x": 3}}, flag=True')
+        assert len(result) == 2
+        assert "flag=True" in result[1]
+
+
+class TestRegistryCoercion:
+    """Tests for the registry auto-coercion safety net."""
+
+    def test_registry_coerces_string_dict_to_dict(self):
+        """Registry should auto-coerce a stringified JSON dict before calling the tool."""
+        received_args = {}
+
+        def capture_tool(fundamentals):
+            received_args["fundamentals"] = fundamentals
+            return {"score": 5}
+
+        registry = ToolRegistry(max_calls_per_agent=5)
+        registry.register(ToolSpec(
+            name="test_tool",
+            description="test",
+            func=capture_tool,
+            parameters={"fundamentals": "dict"},
+        ))
+
+        # Simulate what happens when the parser returns a string instead of a dict
+        result = registry.execute("test_agent", "test_tool", {
+            "fundamentals": '{"roe": "25%", "margin": "20%"}'
+        })
+        assert result == {"score": 5}
+        assert isinstance(received_args["fundamentals"], dict)
+        assert received_args["fundamentals"]["roe"] == "25%"
+
+    def test_registry_leaves_real_dicts_alone(self):
+        """Registry should not modify kwargs that are already dicts."""
+        received_args = {}
+
+        def capture_tool(fundamentals):
+            received_args["fundamentals"] = fundamentals
+            return {"score": 5}
+
+        registry = ToolRegistry(max_calls_per_agent=5)
+        registry.register(ToolSpec(
+            name="test_tool",
+            description="test",
+            func=capture_tool,
+            parameters={"fundamentals": "dict"},
+        ))
+
+        original_dict = {"roe": "25%"}
+        result = registry.execute("test_agent", "test_tool", {
+            "fundamentals": original_dict
+        })
+        assert result == {"score": 5}
+        assert received_args["fundamentals"] is original_dict
+
 
 # ---------------------------------------------------------------------------
 # Agent Integration Tests
@@ -288,7 +394,7 @@ TOOL_CALLS:
                     "second_order_effects": ["Margin pressure"],
                     "third_order_effects": ["Talent loss"],
                     "worst_case_scenario": "30% downside",
-                    "risk_score": 5.5,
+                    "bearish_conviction": 5.5,
                     "key_vulnerabilities": {"valuation": "Above mean"},
                 })
             return "Thinking about risks..."

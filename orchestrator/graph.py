@@ -3,27 +3,23 @@ LangGraph StateGraph for the investment committee workflow.
 
 This replaces v1's ThreadPoolExecutor orchestration in committee.py
 with a declarative state-machine graph. Same inputs, same outputs,
-but now with conditional edges (convergence check, debate loop)
-and parallel fan-out via Send.
+but now with conditional edges (debate loop) and parallel fan-out
+via Send.  Debate always runs (convergence is noted, not skipped).
 
 Graph topology (full pipeline):
     START → gather_data → [Send 3 analysts] → report_phase1
                                                     │
-                                           [should_debate?]
-                                          /                 \\
-                                convergence_met          enter_debate
-                                     │                       │
-                              mark_debate_skipped    run_debate_round ◄──┐
-                                     │                  │                │
-                                     │           [debate_done?]          │
-                                     │           /           \\          │
-                                     │      done          continue ──────┘
-                                     │         │
-                                     └──► report_debate_complete
-                                                │
-                                        run_portfolio_manager
-                                                │
-                                            finalize → END
+                                            run_debate_round ◄──┐
+                                                │                │
+                                         [debate_done?]          │
+                                         /           \\          │
+                                    done          continue ──────┘
+                                       │
+                                report_debate_complete
+                                       │
+                                run_portfolio_manager
+                                       │
+                                   finalize → END
 
 Phase C: Two-phase execution (HITL)
     Phase 1 graph: START → ... → report_debate_complete → END
@@ -58,23 +54,13 @@ def _fan_out_analysts(state: CommitteeState) -> list[Send]:
 
 def _should_debate(state: CommitteeState) -> str:
     """
-    After report_phase1: decide whether to enter the debate loop.
+    After report_phase1: always enter the debate loop.
 
-    Convergence check (new in v2): if the bull conviction score and
-    bear risk score are within 2 points, skip the debate — the agents
-    already mostly agree and debate adds little value.
-
-    Uses strict < 2.0 (not <=) so the mock LLM (7.5 - 5.5 = 2.0)
-    still enters debate and existing tests pass unchanged.
+    Previously this would skip debate when bull/bear scores converged
+    (spread < 2.0).  We now always debate so the user can observe the
+    convergence first-hand in the Debate tab.  The convergence spread is
+    still reported in report_debate_complete for informational purposes.
     """
-    bull = state.get("bull_case")
-    bear = state.get("bear_case")
-
-    if bull and bear:
-        spread = abs(bull.conviction_score - bear.risk_score)
-        if spread < 2.0:
-            return "convergence_met"
-
     return "enter_debate"
 
 
@@ -265,6 +251,7 @@ def _state_to_result(state: dict) -> CommitteeResult:
         committee_memo=state.get("committee_memo"),
         traces=state.get("traces", {}),
         conviction_timeline=state.get("conviction_timeline", []),
+        parsing_failures=state.get("parsing_failures", []),
         total_duration_ms=state.get("total_duration_ms", 0.0),
         total_tokens=state.get("total_tokens", 0),
     )
@@ -359,6 +346,7 @@ def run_graph(
         # Initialize reducer base values
         "traces": {},
         "conviction_timeline": [],
+        "parsing_failures": [],
         # Initialize debate state
         "debate_round": 0,
         "debate_skipped": False,
@@ -417,6 +405,7 @@ def run_graph_phase1(
         "start_time": time.time(),
         "traces": {},
         "conviction_timeline": [],
+        "parsing_failures": [],
         "debate_round": 0,
         "debate_skipped": False,
     }

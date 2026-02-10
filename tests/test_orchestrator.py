@@ -48,7 +48,7 @@ class OrchestratorMockLLM:
                     "second_order_effects": ["Margin pressure from competition"],
                     "third_order_effects": ["Talent loss if growth slows"],
                     "worst_case_scenario": "30% downside in recession",
-                    "risk_score": 5.5,
+                    "bearish_conviction": 5.5,
                     "key_vulnerabilities": {"valuation": "Above historical mean"},
                 })
             return "Thinking about risks..."

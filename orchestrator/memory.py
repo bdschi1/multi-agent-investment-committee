@@ -55,7 +55,7 @@ def store_analysis(ticker: str, result: Any) -> None:
         summary["bull_conviction"] = result.bull_case.conviction_score
 
     if hasattr(result, "bear_case") and result.bear_case:
-        summary["bear_risk"] = result.bear_case.risk_score
+        summary["bear_bearish_conviction"] = result.bear_case.bearish_conviction
 
     if hasattr(result, "macro_view") and result.macro_view:
         summary["macro_favorability"] = result.macro_view.macro_favorability

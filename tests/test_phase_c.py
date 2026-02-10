@@ -77,7 +77,7 @@ class MockLLMPhaseC:
                     "second_order_effects": ["Margin pressure"],
                     "third_order_effects": ["Talent loss"],
                     "worst_case_scenario": "30% downside",
-                    "risk_score": 5.5,
+                    "bearish_conviction": 5.5,
                     "key_vulnerabilities": {"valuation": "Above mean"},
                 })
             return "Thinking about risks..."
@@ -421,7 +421,7 @@ class TestTwoPhaseExecution:
         )
 
         bull_thesis = intermediate["bull_case"].thesis
-        bear_risk = intermediate["bear_case"].risk_score
+        bear_risk = intermediate["bear_case"].bearish_conviction
 
         result = run_graph_phase2(
             intermediate_state=intermediate,
@@ -431,7 +431,7 @@ class TestTwoPhaseExecution:
 
         # Bull and bear should be preserved exactly
         assert result.bull_case.thesis == bull_thesis
-        assert result.bear_case.risk_score == bear_risk
+        assert result.bear_case.bearish_conviction == bear_risk
 
 
 # ===========================================================================

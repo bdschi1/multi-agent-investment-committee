@@ -18,6 +18,8 @@ from agents.base import (
     BearCase,
     Rebuttal,
     StepType,
+    extract_json,
+    clean_json_artifacts,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,14 @@ that may highlight risks you would otherwise miss:
 {user_context}
 """
 
+        user_kb = context.get('user_kb', '').strip()
+        kb_section = ""
+        if user_kb:
+            kb_section = f"""
+
+{user_kb}
+"""
+
         prompt = f"""You are a senior risk manager on an investment committee.
 Your job is to BUILD THE BEAR CASE for {ticker}. You are the devil's advocate.
 
@@ -60,7 +70,7 @@ First, THINK about what could go wrong. Consider:
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}
+{expert_section}{kb_section}
 Respond with your initial risk assessment:
 1. What are the most obvious risks? (Acknowledge them, but these are usually PRICED IN.)
 2. What are the HIDDEN risks that most analysts miss? THIS IS YOUR ALPHA.
@@ -68,6 +78,21 @@ Respond with your initial risk assessment:
 3. What second-order effects could cascade from primary risks?
 4. What would a worst-case scenario look like?
 5. What is the CONSENSUS BEAR VIEW? Where does your risk assessment DIFFER?
+
+RETURN DECOMPOSITION CHALLENGE (heuristic reasoning — not precise computation):
+6. ALPHA SKEPTICISM: If a bull case claims X% idiosyncratic return, challenge it:
+   - Is the "alpha" actually disguised factor exposure? (e.g., momentum or sector beta)
+   - What portion of the expected return depends on the SECTOR moving, not the company?
+   - If you strip out industry return, does the stock-specific thesis still hold?
+7. DOWNSIDE VOL & SORTINO STRESS TEST: The bull case may understate downside risk:
+   - What is the realistic DOWNSIDE volatility? (Not symmetric vol — focus on loss distribution)
+   - Stress-test the Sortino: if downside vol is 1.5x what bulls assume, does the
+     risk-adjusted return still justify the position?
+   - For potential shorts: what is the upside risk (short squeeze, mean reversion)?
+8. FACTOR-AS-ALPHA FLAG: Is this stock's return driven by systematic factors
+   (momentum, value, quality, size) rather than genuine idiosyncratic alpha?
+   If the return decomposes mostly into factor returns, it can be replicated cheaper
+   with an ETF — the active position doesn't add value.
 
 ANTI-OBVIOUS REQUIREMENT:
 - "Recession risk" or "competition" alone are not actionable insights.
@@ -132,6 +157,13 @@ EXPERT GUIDANCE (incorporate into your risk analysis):
 {user_context}
 """
 
+        user_kb = context.get('user_kb', '').strip()
+        kb_section = ""
+        if user_kb:
+            kb_section = f"""
+{user_kb}
+"""
+
         # Inject dynamic tool results if available
         tool_data_section = ""
         if tool_results:
@@ -148,7 +180,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{tool_data_section}
+{expert_section}{kb_section}{tool_data_section}
 Produce a STRUCTURED bear case. Think in CAUSAL CHAINS for 2nd/3rd order effects.
 
 IMPORTANT: Your output should NOT default to "avoid/no position." If the data supports it,
@@ -168,6 +200,17 @@ Also include TECHNICAL ANALYSIS:
 - Key support/resistance levels and potential breakdown triggers
 - Relative performance vs. sector and market over 1m/3m/6m
 
+RETURN DECOMPOSITION CHALLENGE (heuristic reasoning — not precise computation):
+- If a bull thesis claims alpha, challenge the decomposition: how much of the
+  expected return is actually sector/industry return vs. true idiosyncratic alpha?
+- Stress-test the Sortino ratio: what if downside vol is 1.5-2x the bull's assumption?
+  Many blow-ups come from underestimating tail risk in the loss distribution.
+- FLAG factor-masquerading-as-alpha: if the stock's returns decompose mostly into
+  momentum, value, or quality factors, the "alpha" can be replicated with cheaper
+  factor ETFs. The active position doesn't add value — it adds risk.
+- For short theses: estimate the heuristic Sharpe using (-1 × expected return) / vol.
+  A short with Sharpe > 0.5 is actionable; below that, the risk may not justify the carry cost.
+
 Example of causal chain thinking:
   Risk: "Rising interest rates"
   → 2nd order: "Higher borrowing costs compress margins by 200bps"
@@ -186,7 +229,7 @@ Respond in valid JSON matching this exact schema:
         ...
     ],
     "worst_case_scenario": "Narrative description of how things could compound",
-    "risk_score": 6.5,
+    "bearish_conviction": 6.5,
     "key_vulnerabilities": {{"area": "description"}},
     "short_thesis": "If warranted: 1-2 sentence active short pitch. If not warranted, leave empty.",
     "actionable_recommendation": "AVOID or UNDERWEIGHT or ACTIVE SHORT or HEDGE",
@@ -199,7 +242,7 @@ Respond in valid JSON matching this exact schema:
     }}
 }}
 
-risk_score: 0-10 scale (0 = no risk, 10 = extreme risk / uninvestable)
+bearish_conviction: 0-10 scale (0 = minimal concern, 10 = maximum bearish conviction — you are certain this is a bad investment)
 actionable_recommendation: Choose the most appropriate — don't default to AVOID if ACTIVE SHORT is warranted.
 
 Be specific. Use numbers. Trace the causal chains.
@@ -209,7 +252,7 @@ Respond ONLY with the JSON object, no other text."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            parsed = self._extract_json(response_text)
+            parsed, _ = extract_json(response_text)
             return BearCase(**parsed)
         except Exception as e:
             logger.warning(f"Failed to parse bear case JSON: {e}. Using fallback.")
@@ -218,8 +261,8 @@ Respond ONLY with the JSON object, no other text."""
                 risks=["Analysis generated but structured parsing failed"],
                 second_order_effects=[],
                 third_order_effects=[],
-                worst_case_scenario=response_text[:500],
-                risk_score=5.0,
+                worst_case_scenario=clean_json_artifacts(response_text),
+                bearish_conviction=5.0,
                 key_vulnerabilities={},
             )
 
@@ -233,19 +276,26 @@ Risks: {bear_case.risks}
 2nd Order Effects: {bear_case.second_order_effects}
 3rd Order Effects: {bear_case.third_order_effects}
 Worst Case: {bear_case.worst_case_scenario}
-Risk Score: {bear_case.risk_score}/10
+Bearish Conviction: {bear_case.bearish_conviction}/10
 
 REFLECT on your analysis:
 1. Are your causal chains logically sound or are you stretching?
 2. Did you miss any major risk categories?
 3. Are you being appropriately bearish or catastrophizing?
 4. CONVICTION SENSITIVITY — what specific, observable events would:
-   a) INCREASE your risk score by 2+ points? (Be specific: "If debt/EBITDA exceeds 4x...")
-   b) DECREASE your risk score by 2+ points? (Be specific: "If free cash flow grows 20% YoY...")
+   a) INCREASE your bearish conviction by 2+ points? (Be specific: "If debt/EBITDA exceeds 4x...")
+   b) DECREASE your bearish conviction by 2+ points? (Be specific: "If free cash flow grows 20% YoY...")
    c) Make you flip to BULLISH? What would it take?
 5. What data would help validate or invalidate your risk assessment?
 6. VARIANT CHECK — are your risks genuinely non-consensus, or are you restating obvious bears?
    The market already knows about "competition" and "macro risk." What are you seeing that others don't?
+7. RETURN DECOMPOSITION CHALLENGE CHECK (heuristic, not precise):
+   a) Did you adequately challenge whether the bull's "alpha" is real idiosyncratic return
+      or disguised factor/sector exposure?
+   b) Did you stress-test the downside vol assumption? Sortino is only as good as the
+      downside estimate — if you didn't push back on it, the bull gets a free pass.
+   c) Did you flag any factor-as-alpha risk? If not, reconsider whether the stock's
+      returns can be replicated cheaper with systematic factor exposure.
 
 Be calibrated. Good risk management isn't about being maximally pessimistic —
 it's about being accurately pessimistic."""
@@ -268,7 +318,7 @@ Catalysts: {bull_case.catalysts if hasattr(bull_case, 'catalysts') else bull_cas
 Conviction: {bull_case.conviction_score if hasattr(bull_case, 'conviction_score') else bull_case.get('conviction_score', 'N/A')}
 
 YOUR BEAR CASE:
-Risk Score: {bear_case.risk_score}/10
+Bearish Conviction: {bear_case.bearish_conviction}/10
 Key Risks: {bear_case.risks}
 
 Respond in valid JSON:
@@ -278,7 +328,7 @@ Respond in valid JSON:
     "revised_conviction": 6.5
 }}
 
-revised_conviction is YOUR risk score after considering the bull case (0-10, where 10 = highest risk).
+revised_conviction is YOUR bearish conviction after considering the bull case (0-10, where 10 = maximum bearish conviction).
 
 Be rigorous but fair — acknowledge strong bull points, but press on the weaknesses.
 Respond ONLY with the JSON object."""
@@ -287,7 +337,7 @@ Respond ONLY with the JSON object."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            parsed = self._extract_json(response_text)
+            parsed, _ = extract_json(response_text)
             return Rebuttal(
                 agent_role=AgentRole.RISK_MANAGER,
                 responding_to=AgentRole.SECTOR_ANALYST,
@@ -301,25 +351,3 @@ Respond ONLY with the JSON object."""
                 points=["Rebuttal generated but structured parsing failed"],
                 concessions=[],
             )
-
-    @staticmethod
-    def _extract_json(text: str) -> dict:
-        """Extract JSON from a response that might contain markdown or extra text."""
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-
-        if "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-
-        start = text.index("{")
-        end = text.rindex("}") + 1
-        return json.loads(text[start:end])

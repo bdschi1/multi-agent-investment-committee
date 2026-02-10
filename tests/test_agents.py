@@ -79,7 +79,7 @@ def _mock_bear_json(ticker: str = "TEST") -> str:
             "Margin compression forces R&D cuts, weakening competitive moat over 2-3 years",
         ],
         "worst_case_scenario": "Regulatory action + recession = 40% downside",
-        "risk_score": 6.5,
+        "bearish_conviction": 6.5,
         "key_vulnerabilities": {"regulation": "pending legislation"},
     })
 
@@ -143,9 +143,9 @@ class TestSchemas:
             second_order_effects=["Market share loss"],
             third_order_effects=["Margin compression"],
             worst_case_scenario="50% decline",
-            risk_score=8.0,
+            bearish_conviction=8.0,
         )
-        assert bc.risk_score == 8.0
+        assert bc.bearish_conviction == 8.0
         assert len(bc.risks) == 1
 
     def test_committee_memo_schema(self):
@@ -192,7 +192,7 @@ class TestSectorAnalyst:
         agent = SectorAnalystAgent(model=mock)
 
         bear = BearCase(
-            ticker="TEST", risks=["risk1"], risk_score=6.0,
+            ticker="TEST", risks=["risk1"], bearish_conviction=6.0,
             worst_case_scenario="bad", second_order_effects=[], third_order_effects=[],
         )
         bull = BullCase(
@@ -230,7 +230,7 @@ class TestPortfolioManager:
                 time_horizon="1y", supporting_evidence=[], catalysts=[],
             ),
             "bear_case": BearCase(
-                ticker="TEST", risks=["risk1"], risk_score=6.0,
+                ticker="TEST", risks=["risk1"], bearish_conviction=6.0,
                 worst_case_scenario="bad", second_order_effects=[], third_order_effects=[],
             ),
             "debate": {},

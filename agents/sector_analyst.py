@@ -18,6 +18,8 @@ from agents.base import (
     BullCase,
     Rebuttal,
     StepType,
+    extract_json,
+    clean_json_artifacts,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,14 @@ should materially influence your thinking:
 {user_context}
 """
 
+        user_kb = context.get('user_kb', '').strip()
+        kb_section = ""
+        if user_kb:
+            kb_section = f"""
+
+{user_kb}
+"""
+
         prompt = f"""You are a senior sector analyst on an investment committee.
 Your job is to BUILD THE BULL CASE for {ticker}.
 
@@ -53,7 +63,7 @@ First, THINK about what you know and what hypotheses you want to test.
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}
+{expert_section}{kb_section}
 Respond with your initial thinking:
 1. What is this company/sector and why might it be interesting?
 2. What are your initial hypotheses for a bull case?
@@ -62,6 +72,31 @@ Respond with your initial thinking:
 5. What is the CONSENSUS VIEW on this stock? What does "the street" think?
 6. Where might you find a VARIANT PERCEPTION — something the market is missing or
    mispricing? The best alpha comes from non-consensus, well-researched views.
+
+NEWS SENTIMENT ANALYSIS:
+7. For each news headline, extract the SENTIMENT SIGNAL:
+   - Is the headline bullish, bearish, or neutral for the stock?
+   - What is the signal strength (strong/moderate/weak)?
+   - What type of catalyst does it represent (earnings, product, regulatory, management, macro)?
+   - Does the news sentiment DIVERGE from price action? (Positive news + falling price = red flag;
+     Negative news + rising price = potential strength)
+8. What is the AGGREGATE sentiment across all news? Is it shifting over time?
+9. Are there sentiment signals the market hasn't fully processed yet?
+
+RETURN DECOMPOSITION (heuristic reasoning — not precise computation):
+10. PRICE TARGET & TOTAL RETURN: Based on your thesis, what is a reasonable 12-month
+    price target? What total return does that imply from the current price?
+11. INDUSTRY vs IDIOSYNCRATIC RETURN: Of the total return you expect, how much is
+    the sector/industry likely to contribute vs. company-specific alpha?
+    - Idiosyncratic return = total return - estimated industry return
+    - THIS is the alpha signal. If most of the return comes from the sector moving,
+      there's no stock-specific edge — you're just making a sector bet.
+12. HEURISTIC SHARPE / SORTINO: Given the stock's approximate volatility:
+    - Sharpe ≈ idiosyncratic_return / estimated_annual_vol
+    - Sortino ≈ idiosyncratic_return / downside_vol (focus on loss volatility)
+    - For SHORT positions: flip the return sign (use -1 × expected return)
+    - These are rough mental-model estimates, not precise calculations.
+    - A Sharpe below 0.3 means the risk-adjusted return may not justify the position.
 
 IMPORTANT — avoid the obvious:
 - Do NOT build a thesis around widely-known narratives (e.g. "AI is growing" for big tech).
@@ -123,6 +158,13 @@ EXPERT GUIDANCE (incorporate into your analysis):
 {user_context}
 """
 
+        user_kb = context.get('user_kb', '').strip()
+        kb_section = ""
+        if user_kb:
+            kb_section = f"""
+{user_kb}
+"""
+
         # Inject dynamic tool results if available
         tool_data_section = ""
         if tool_results:
@@ -139,6 +181,7 @@ Your plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
+{kb_section}
 {expert_section}{tool_data_section}
 Produce a STRUCTURED bull case. Include:
 1. Technical analysis: recent price action, trend, momentum, key support/resistance levels
@@ -168,10 +211,38 @@ Respond in valid JSON matching this exact schema:
     "conviction_score": 7.5,
     "time_horizon": "6-12 months",
     "key_metrics": {{"metric_name": "value"}},
-    "technical_outlook": "Stock is trading above 50/200 DMA with bullish momentum..."
+    "technical_outlook": "Stock is trading above 50/200 DMA with bullish momentum...",
+    "sentiment_factors": [
+        {{"headline": "headline text", "sentiment": "bullish/bearish/neutral", "signal_strength": "strong/moderate/weak", "catalyst_type": "earnings/product/regulatory/management/macro"}},
+        ...
+    ],
+    "aggregate_news_sentiment": "strongly_bullish / bullish / neutral / bearish / strongly_bearish",
+    "sentiment_divergence": "Where news sentiment diverges from price action (e.g. positive news + declining price = institutional selling)",
+    "price_target": "$XXX in [horizon] — [methodology and key assumptions, e.g. 'DCF with 11% WACC, 22x terminal multiple on $8.50 normalized FCF']",
+    "forecasted_total_return": "X% — [how derived, e.g. '(185/152)-1 = 22%, includes 1.2% dividend yield over 12m horizon']",
+    "estimated_industry_return": "X% — [reasoning, e.g. 'semis historically track GDP+4%, mid-cycle expansion supports 8-10% sector return']",
+    "idiosyncratic_return": "X% — [reasoning, e.g. '14% alpha = 22% total - 8% sector; driven by share gains in data center + 200bp margin expansion']",
+    "estimated_sharpe": "X.XX — [reasoning, e.g. '0.47 = 14% idio / 30% ann vol; moderate, reflects binary regulatory outcome']",
+    "estimated_sortino": "X.XX — [reasoning, e.g. '0.64 = 14% idio / 22% downside vol; asymmetric — asset floor limits downside']"
 }}
 
 conviction_score: 0-10 scale (0 = no conviction, 10 = highest conviction)
+
+RETURN DECOMPOSITION IS REQUIRED (heuristic estimates, not precise calculations):
+Each field MUST include both the estimate AND a 1-2 sentence explanation of how you arrived at it:
+- price_target: Target + methodology and key assumptions (DCF, multiple, sum-of-parts)
+- forecasted_total_return: Pct return + how derived from price target vs current price
+- estimated_industry_return: Sector return + why (cycle position, historical comps, macro backdrop)
+- idiosyncratic_return: Alpha + what drives it (company-specific catalysts above sector drift).
+  If near zero, your thesis is a sector bet, not a stock pick — say so.
+- estimated_sharpe / estimated_sortino: Risk-adjusted number + what vol assumption you used and why.
+  For SHORT theses, flip the return sign: Sharpe = (-1 * expected_return) / vol.
+  These are heuristic mental-model numbers, not optimizer outputs.
+
+NEWS SENTIMENT EXTRACTION IS REQUIRED:
+- For EVERY news headline provided, extract a sentiment factor with classification.
+- Aggregate into an overall sentiment reading.
+- Identify any divergence between sentiment and price action — this is where alpha lives.
 
 Ground your analysis in the data provided. Be specific with numbers.
 For the catalyst_calendar, include at least 4-6 events over the next 12 months.
@@ -182,14 +253,13 @@ Respond ONLY with the JSON object, no other text."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            # Try to parse the JSON from the response
-            parsed = self._extract_json(response_text)
+            parsed, _ = extract_json(response_text)
             return BullCase(**parsed)
         except Exception as e:
             logger.warning(f"Failed to parse bull case JSON: {e}. Using fallback.")
             return BullCase(
                 ticker=ticker,
-                thesis=response_text[:500],
+                thesis=clean_json_artifacts(response_text),
                 supporting_evidence=["Analysis generated but structured parsing failed"],
                 catalysts=[],
                 conviction_score=5.0,
@@ -207,6 +277,8 @@ Thesis: {bull_case.thesis}
 Evidence: {bull_case.supporting_evidence}
 Catalysts: {bull_case.catalysts}
 Conviction: {bull_case.conviction_score}/10
+News Sentiment: {bull_case.aggregate_news_sentiment if hasattr(bull_case, 'aggregate_news_sentiment') else 'N/A'}
+Sentiment Divergence: {bull_case.sentiment_divergence if hasattr(bull_case, 'sentiment_divergence') else 'N/A'}
 
 REFLECT on your analysis:
 1. What are the strongest parts of this thesis?
@@ -219,6 +291,18 @@ REFLECT on your analysis:
 5. Rate your confidence in this analysis (high/medium/low) and why.
 6. VARIANT CHECK — is your thesis genuinely non-consensus, or are you restating the obvious?
    If it's consensus, acknowledge that and explain why consensus might be right this time.
+7. SENTIMENT QUALITY CHECK:
+   a) Does your sentiment extraction accurately capture the tone of each headline?
+   b) Is the aggregate sentiment consistent with your conviction score? If not, explain the divergence.
+   c) Are there any sentiment signals you may have over- or under-weighted?
+   d) Does the sentiment-price divergence (if any) strengthen or weaken your thesis?
+8. RETURN DECOMPOSITION CHECK (these are heuristic estimates, not precise calculations):
+   a) Is your price target defensible? What methodology did you use and is it appropriate?
+   b) How much of your forecasted return is idiosyncratic vs. just riding the sector?
+      If idio_return is near zero, you're making a sector bet, not a stock pick — acknowledge this.
+   c) Is your heuristic Sharpe reasonable? Below 0.3 is weak. Above 1.0 should be scrutinized.
+   d) Does your Sortino tell a different story than Sharpe? (It should, if downside is asymmetric.)
+   e) If this were a SHORT thesis, did you properly flip the return sign?
 
 Be honest and self-critical."""
 
@@ -241,7 +325,7 @@ RISK MANAGER'S BEAR CASE:
 Risks: {bear_case.risks if hasattr(bear_case, 'risks') else bear_case.get('risks', [])}
 2nd Order Effects: {bear_case.second_order_effects if hasattr(bear_case, 'second_order_effects') else bear_case.get('second_order_effects', [])}
 3rd Order Effects: {bear_case.third_order_effects if hasattr(bear_case, 'third_order_effects') else bear_case.get('third_order_effects', [])}
-Risk Score: {bear_case.risk_score if hasattr(bear_case, 'risk_score') else bear_case.get('risk_score', 'N/A')}
+Bearish Conviction: {bear_case.bearish_conviction if hasattr(bear_case, 'bearish_conviction') else bear_case.get('bearish_conviction', 'N/A')}
 
 Respond in valid JSON:
 {{
@@ -257,7 +341,7 @@ Respond ONLY with the JSON object."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            parsed = self._extract_json(response_text)
+            parsed, _ = extract_json(response_text)
             return Rebuttal(
                 agent_role=AgentRole.SECTOR_ANALYST,
                 responding_to=AgentRole.RISK_MANAGER,
@@ -271,28 +355,3 @@ Respond ONLY with the JSON object."""
                 points=["Rebuttal generated but structured parsing failed"],
                 concessions=[],
             )
-
-    @staticmethod
-    def _extract_json(text: str) -> dict:
-        """Extract JSON from a response that might contain markdown or extra text."""
-        # Try direct parse first
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # Try to find JSON block in markdown
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-
-        if "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-
-        # Try to find JSON object boundaries
-        start = text.index("{")
-        end = text.rindex("}") + 1
-        return json.loads(text[start:end])

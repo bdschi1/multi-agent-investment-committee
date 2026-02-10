@@ -38,8 +38,9 @@ class ConvictionSnapshot:
     """A single point in the conviction evolution timeline."""
     phase: str           # e.g. "Initial Analysis", "Post-Debate", "PM Decision"
     agent: str           # e.g. "Sector Analyst", "Risk Manager", "Portfolio Manager"
-    score: float         # conviction or risk score (0-10)
-    score_type: str      # "conviction" or "risk"
+    score: float         # conviction score (0-10) — all agents use the same scale
+    score_type: str      # "conviction" or "bearish" or "favorability"
+    rationale: str = ""  # LLM-generated: why this score, what changed, key thesis points
 
 
 @dataclass
@@ -55,6 +56,7 @@ class CommitteeResult:
     committee_memo: Optional[CommitteeMemo] = None
     traces: dict[str, ReasoningTrace] = field(default_factory=dict)
     conviction_timeline: list[ConvictionSnapshot] = field(default_factory=list)
+    parsing_failures: list[str] = field(default_factory=list)
     total_duration_ms: float = 0.0
     total_tokens: int = 0
 
@@ -69,9 +71,13 @@ class CommitteeResult:
             "risk_rebuttal": self.risk_rebuttal.model_dump() if self.risk_rebuttal else None,
             "committee_memo": self.committee_memo.model_dump() if self.committee_memo else None,
             "conviction_timeline": [
-                {"phase": s.phase, "agent": s.agent, "score": s.score, "score_type": s.score_type}
+                {
+                    "phase": s.phase, "agent": s.agent, "score": s.score,
+                    "score_type": s.score_type, "rationale": s.rationale,
+                }
                 for s in self.conviction_timeline
             ],
+            "parsing_failures": self.parsing_failures,
             "total_duration_ms": self.total_duration_ms,
             "total_tokens": self.total_tokens,
         }
@@ -193,8 +199,8 @@ class InvestmentCommittee:
         result.conviction_timeline.append(ConvictionSnapshot(
             phase="Initial Analysis",
             agent="Risk Manager",
-            score=result.bear_case.risk_score,
-            score_type="risk",
+            score=result.bear_case.bearish_conviction,
+            score_type="bearish",
         ))
         result.conviction_timeline.append(ConvictionSnapshot(
             phase="Initial Analysis",
@@ -205,7 +211,7 @@ class InvestmentCommittee:
 
         status(
             f"  Bull case: conviction {result.bull_case.conviction_score}/10 | "
-            f"Bear case: risk {result.bear_case.risk_score}/10 | "
+            f"Bear case: bearish conviction {result.bear_case.bearish_conviction}/10 | "
             f"Macro favorability: {result.macro_view.macro_favorability}/10"
         )
 
@@ -245,14 +251,14 @@ class InvestmentCommittee:
                 phase="Post-Debate",
                 agent="Risk Manager",
                 score=result.risk_rebuttal.revised_conviction,
-                score_type="risk",
+                score_type="bearish",
             ))
 
         status(
             f"  Debate complete | "
             f"Analyst revised conviction: "
             f"{result.analyst_rebuttal.revised_conviction if result.analyst_rebuttal else 'N/A'} | "
-            f"Risk Mgr revised risk: "
+            f"Risk Mgr revised bearish conviction: "
             f"{result.risk_rebuttal.revised_conviction if result.risk_rebuttal else 'N/A'}"
         )
 

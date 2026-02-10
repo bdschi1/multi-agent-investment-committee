@@ -14,6 +14,7 @@ the loop behaves identically to v1.
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import re
 import time
@@ -104,6 +105,47 @@ class BullCase(BaseModel):
     time_horizon: str = Field(description="e.g. '6-12 months', '2-3 years'")
     key_metrics: dict[str, Any] = Field(default_factory=dict)
     technical_outlook: str = Field(default="", description="Technical analysis summary")
+    # Sentiment extraction fields
+    sentiment_factors: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Extracted sentiment factors from news: [{headline, sentiment, signal_strength, catalyst_type}, ...]",
+    )
+    aggregate_news_sentiment: str = Field(
+        default="neutral",
+        description="Overall news sentiment: strongly_bullish / bullish / neutral / bearish / strongly_bearish",
+    )
+    sentiment_divergence: str = Field(
+        default="",
+        description="Where news sentiment diverges from price action or fundamentals",
+    )
+    # Quantitative heuristic fields (LLM-estimated, not computed)
+    # NOTE: These are heuristic estimates from LLM reasoning, not precise calculations.
+    # The agents use available market data to approximate these values as part of their
+    # qualitative-quantitative reasoning process.
+    price_target: str = Field(
+        default="",
+        description="Price target + reasoning (e.g. '$185 in 12m — DCF with 12% WACC, 25x terminal multiple on normalized FCF')",
+    )
+    forecasted_total_return: str = Field(
+        default="",
+        description="Total return estimate + how derived (e.g. '22% — (185/152)-1, includes 1.2% div yield')",
+    )
+    estimated_industry_return: str = Field(
+        default="",
+        description="Sector return estimate + reasoning (e.g. '8% — semis historically track GDP+4%, current cycle mid-expansion')",
+    )
+    idiosyncratic_return: str = Field(
+        default="",
+        description="Idio return (alpha) + reasoning (e.g. '14% — 22% total minus 8% sector; driven by share gains + margin expansion')",
+    )
+    estimated_sharpe: str = Field(
+        default="",
+        description="Heuristic Sharpe + reasoning (e.g. '0.47 — 14% idio / 30% vol; moderate, reflects binary FDA outcome')",
+    )
+    estimated_sortino: str = Field(
+        default="",
+        description="Heuristic Sortino + reasoning (e.g. '0.64 — 14% idio / 22% downside vol; downside limited by asset floor')",
+    )
 
 
 class BearCase(BaseModel):
@@ -114,7 +156,7 @@ class BearCase(BaseModel):
     second_order_effects: list[str] = Field(default_factory=list)
     third_order_effects: list[str] = Field(default_factory=list)
     worst_case_scenario: str = ""
-    risk_score: float = Field(ge=0.0, le=10.0, description="0 = no risk, 10 = extreme risk")
+    bearish_conviction: float = Field(ge=0.0, le=10.0, description="0 = minimal concern, 10 = maximum bearish conviction")
     key_vulnerabilities: dict[str, Any] = Field(default_factory=dict)
     # Active short positioning fields
     short_thesis: str = Field(default="", description="Active short pitch if warranted")
@@ -180,6 +222,50 @@ class MacroView(BaseModel):
         default_factory=list,
         description="Macro factors working against the stock",
     )
+    # Portfolio strategist fields
+    annualized_vol_regime: str = Field(
+        default="",
+        description="Current vol regime: low (<12), normal (12-18), elevated (18-25), crisis (>25)",
+    )
+    vol_budget_guidance: str = Field(
+        default="",
+        description="Guidance on position sizing within annualized vol boundaries",
+    )
+    portfolio_directionality: str = Field(
+        default="",
+        description="Recommended net exposure direction: net long / market neutral / net short",
+    )
+    sector_style_assessment: str = Field(
+        default="",
+        description="Sector and style agnostic assessment: growth vs value rotation, large vs small cap, defensive vs cyclical",
+    )
+    correlation_regime: str = Field(
+        default="",
+        description="Current correlation regime and diversification implications",
+    )
+    # Quantitative portfolio construction heuristics (LLM-estimated, not computed)
+    # NOTE: These are heuristic reasoning outputs, not precise calculations.
+    sector_avg_volatility: str = Field(
+        default="",
+        description="Estimated annualized vol for this stock's sector (e.g. '22% annualized')",
+    )
+    recommended_sizing_method: str = Field(
+        default="",
+        description=(
+            "Recommended NMV sizing method given the regime: "
+            "proportional (NMV=k*alpha) / risk_parity (NMV=k*alpha/sigma) / "
+            "mean_variance (NMV=k*alpha/sigma^2) / shrunk_mean_variance "
+            "(NMV=k*alpha/[p*sigma^2+(1-p)*sigma_sector^2])"
+        ),
+    )
+    portfolio_vol_target: str = Field(
+        default="",
+        description=(
+            "Recommended portfolio annualized vol target and rationale. "
+            "Vol targeting controls risk better than GMV targeting because "
+            "volatility is persistent and partially predictable."
+        ),
+    )
 
 
 class CommitteeMemo(BaseModel):
@@ -196,6 +282,78 @@ class CommitteeMemo(BaseModel):
     dissenting_points: list[str] = Field(default_factory=list)
     risk_mitigants: list[str] = Field(default_factory=list)
     time_horizon: str = ""
+    # Trading-fluent PM fields (PM consults closely with his head trader)
+    implied_vol_assessment: str = Field(
+        default="",
+        description="Assessment of implied vs historical vol and what it signals",
+    )
+    event_path: list[str] = Field(
+        default_factory=list,
+        description="Ordered sequence of near-term events that define the trade path",
+    )
+    conviction_change_triggers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Specific triggers that would change conviction: {trigger: impact}",
+    )
+    factor_exposures: dict[str, str] = Field(
+        default_factory=dict,
+        description="Key factor exposures: momentum, value, quality, size, volatility",
+    )
+    # Quantitative heuristic synthesis (LLM-estimated, not computed)
+    # NOTE: These are heuristic reasoning outputs — the PM reasons through quant
+    # frameworks qualitatively using available market data, not running optimizers.
+    idio_return_estimate: str = Field(
+        default="",
+        description="PM's validated idio return estimate after weighing bull/bear (e.g. '+8% over 12m')",
+    )
+    sharpe_estimate: str = Field(
+        default="",
+        description=(
+            "Heuristic Sharpe ratio: idio_return / vol. For shorts, uses -1*expected_return. "
+            "Reasoning, not precise math."
+        ),
+    )
+    sortino_estimate: str = Field(
+        default="",
+        description=(
+            "Heuristic Sortino ratio: idio_return / downside_vol. For shorts, uses -1*expected_return. "
+            "Reasoning, not precise math."
+        ),
+    )
+    sizing_method_used: str = Field(
+        default="",
+        description=(
+            "Which NMV sizing method the PM applied: proportional / risk_parity / "
+            "mean_variance / shrunk_mean_variance, and why"
+        ),
+    )
+    target_nmv_rationale: str = Field(
+        default="",
+        description=(
+            "Rationale for target net market value: NMV proportional to forecasted alpha, "
+            "adjusted for idio vol and sector vol per the chosen sizing method"
+        ),
+    )
+    vol_target_rationale: str = Field(
+        default="",
+        description=(
+            "Why the PM chose a specific vol target for this position. "
+            "Vol targeting > GMV targeting because vol is persistent and predictable."
+        ),
+    )
+    # T signal: direction * entropy-adjusted confidence
+    position_direction: int = Field(
+        default=0,
+        description="Position direction: +1 (long), -1 (short), 0 (no position)",
+    )
+    raw_confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="Scaled confidence score [0,1]",
+    )
+    t_signal: float = Field(
+        default=0.0,
+        description="T = direction * entropy-adjusted confidence. Range [-1, 1].",
+    )
 
 
 class Rebuttal(BaseModel):
@@ -253,11 +411,12 @@ def _parse_kwargs(args_str: str) -> dict[str, Any]:
     """
     Parse key=value kwargs string into a dict.
 
-    Handles: ticker="NVDA", max_peers=3, flag=True
+    Handles: ticker="NVDA", max_peers=3, flag=True, fundamentals={"roe": "25%"}
     Uses ast.literal_eval for each value to preserve types (int, bool, etc).
+    Falls back to json.loads for JSON-formatted values, then plain string.
     """
     kwargs: dict[str, Any] = {}
-    # Split on commas, but be careful with quoted strings containing commas
+    # Split on commas, but respect quotes and braces/brackets
     parts = _smart_split(args_str)
     for part in parts:
         part = part.strip()
@@ -270,17 +429,23 @@ def _parse_kwargs(args_str: str) -> dict[str, Any]:
             # ast.literal_eval handles strings, ints, floats, bools, None, lists, dicts
             kwargs[key] = ast.literal_eval(value_str)
         except (ValueError, SyntaxError):
-            # Last resort: treat as plain string
-            kwargs[key] = value_str.strip('"').strip("'")
+            # Try json.loads for JSON-formatted values (e.g., dicts with double-quoted keys)
+            try:
+                parsed = json.loads(value_str)
+                kwargs[key] = parsed
+            except (json.JSONDecodeError, ValueError):
+                # Last resort: treat as plain string
+                kwargs[key] = value_str.strip('"').strip("'")
     return kwargs
 
 
 def _smart_split(s: str) -> list[str]:
-    """Split on commas that aren't inside quotes."""
+    """Split on commas that aren't inside quotes, braces, or brackets."""
     parts = []
     current = []
     in_quote = False
     quote_char = None
+    depth = 0  # tracks {}, [] nesting
 
     for ch in s:
         if ch in ('"', "'") and not in_quote:
@@ -291,7 +456,13 @@ def _smart_split(s: str) -> list[str]:
             in_quote = False
             quote_char = None
             current.append(ch)
-        elif ch == ',' and not in_quote:
+        elif not in_quote and ch in ('{', '['):
+            depth += 1
+            current.append(ch)
+        elif not in_quote and ch in ('}', ']'):
+            depth = max(0, depth - 1)
+            current.append(ch)
+        elif ch == ',' and not in_quote and depth == 0:
             parts.append(''.join(current))
             current = []
         else:
@@ -300,6 +471,215 @@ def _smart_split(s: str) -> list[str]:
     if current:
         parts.append(''.join(current))
     return parts
+
+
+# ---------------------------------------------------------------------------
+# Shared JSON extraction — replaces per-agent _extract_json() duplicates
+# ---------------------------------------------------------------------------
+
+def _find_brace_bounded(text: str) -> str:
+    """Find the outermost { ... } substring in text."""
+    start = text.index("{")
+    end = text.rindex("}") + 1
+    return text[start:end]
+
+
+def _fix_trailing_commas(text: str) -> str:
+    """Remove trailing commas before } and ]."""
+    return re.sub(r',\s*([}\]])', r'\1', text)
+
+
+def _fix_single_quotes(text: str) -> str:
+    """Replace single quotes with double quotes for JSON keys/values."""
+    # Only operate on the brace-bounded portion to avoid breaking prose
+    return text.replace("'", '"')
+
+
+def _fix_unbalanced_braces(text: str) -> str:
+    """Append missing closing braces/brackets."""
+    opens = text.count("{") - text.count("}")
+    brackets = text.count("[") - text.count("]")
+    if opens > 0:
+        text += "}" * opens
+    if brackets > 0:
+        text += "]" * brackets
+    return text
+
+
+def extract_json(text: str) -> tuple[dict, bool]:
+    """
+    Extract a JSON dict from LLM output with progressive repair strategies.
+
+    Tries increasingly aggressive repair in order:
+      1. Direct parse
+      2. Markdown ```json block
+      3. Markdown ``` block
+      4. Brace boundary ({...})
+      5. Fix trailing commas
+      6. Single-quote → double-quote
+      7. Unbalanced brace repair
+
+    Returns:
+        (parsed_dict, was_repaired) — was_repaired is True if anything
+        beyond direct parse was needed.
+
+    Raises:
+        ValueError if all strategies fail.
+    """
+    text = text.strip()
+
+    # Strategy 1: direct parse
+    try:
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result, False
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Strategy 2: ```json ... ``` markdown block
+    if "```json" in text:
+        try:
+            start = text.index("```json") + 7
+            end = text.index("```", start)
+            candidate = text[start:end].strip()
+            result = json.loads(candidate)
+            if isinstance(result, dict):
+                return result, True
+        except (json.JSONDecodeError, ValueError, IndexError):
+            pass
+
+    # Strategy 3: ``` ... ``` generic code block
+    if "```" in text:
+        try:
+            start = text.index("```") + 3
+            # Skip optional language tag on same line
+            newline = text.find("\n", start)
+            if newline != -1 and newline - start < 20:
+                start = newline + 1
+            end = text.index("```", start)
+            candidate = text[start:end].strip()
+            result = json.loads(candidate)
+            if isinstance(result, dict):
+                return result, True
+        except (json.JSONDecodeError, ValueError, IndexError):
+            pass
+
+    # Strategy 4: brace boundary — first { to last }
+    try:
+        candidate = _find_brace_bounded(text)
+        result = json.loads(candidate)
+        if isinstance(result, dict):
+            return result, True
+    except (json.JSONDecodeError, ValueError, IndexError):
+        pass
+
+    # From here, all strategies operate on the best candidate we can find
+    try:
+        best = _find_brace_bounded(text)
+    except (ValueError, IndexError):
+        best = text  # no braces at all — try repairs on raw text
+
+    # Strategy 5: fix trailing commas
+    try:
+        repaired = _fix_trailing_commas(best)
+        result = json.loads(repaired)
+        if isinstance(result, dict):
+            return result, True
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Strategy 6: single-quote → double-quote
+    try:
+        repaired = _fix_single_quotes(best)
+        repaired = _fix_trailing_commas(repaired)  # also fix commas
+        result = json.loads(repaired)
+        if isinstance(result, dict):
+            return result, True
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Strategy 7: unbalanced brace repair
+    try:
+        repaired = _fix_trailing_commas(best)
+        repaired = _fix_unbalanced_braces(repaired)
+        result = json.loads(repaired)
+        if isinstance(result, dict):
+            return result, True
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    raise ValueError(
+        f"All JSON extraction strategies failed for text of length {len(text)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# JSON artifact cleaner — for fallback text fields
+# ---------------------------------------------------------------------------
+
+def clean_json_artifacts(text: str, max_length: int = 500) -> str:
+    """
+    Clean JSON syntax from raw LLM output for display in fallback text fields.
+
+    When JSON parsing fails completely, agents stuff response_text[:500] into
+    text fields like thesis, worst_case_scenario, etc. This function strips
+    JSON artifacts so users see readable prose instead of raw JSON.
+
+    Args:
+        text: Raw LLM response text (may contain JSON)
+        max_length: Maximum output length
+
+    Returns:
+        Cleaned text suitable for display, truncated to max_length.
+    """
+    if not text or not text.strip():
+        return ""
+
+    text = text.strip()
+
+    # If it looks like JSON, try to extract the longest string value
+    if text.startswith("{") or text.startswith("[") or '"' in text[:50]:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                # Find the longest string value — likely the most useful content
+                best_val = ""
+                for v in parsed.values():
+                    if isinstance(v, str) and len(v) > len(best_val):
+                        best_val = v
+                if best_val:
+                    return best_val[:max_length]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Try brace-bounded extraction first
+        try:
+            bounded = _find_brace_bounded(text)
+            parsed = json.loads(_fix_trailing_commas(bounded))
+            if isinstance(parsed, dict):
+                best_val = ""
+                for v in parsed.values():
+                    if isinstance(v, str) and len(v) > len(best_val):
+                        best_val = v
+                if best_val:
+                    return best_val[:max_length]
+        except (json.JSONDecodeError, ValueError, IndexError):
+            pass
+
+    # Regex cleanup: remove JSON syntax artifacts
+    cleaned = text
+    # Remove "key": patterns
+    cleaned = re.sub(r'"[a-zA-Z_][a-zA-Z0-9_]*"\s*:', ' ', cleaned)
+    # Remove braces, brackets, and stray quotes
+    cleaned = re.sub(r'[{}\[\]]', ' ', cleaned)
+    # Remove standalone double-quotes (not part of contractions)
+    cleaned = re.sub(r'(?<!\w)"(?!\w)', ' ', cleaned)
+    # Collapse whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    # Remove leading/trailing commas
+    cleaned = cleaned.strip(',').strip()
+
+    return cleaned[:max_length] if cleaned else text[:max_length]
 
 
 # ---------------------------------------------------------------------------

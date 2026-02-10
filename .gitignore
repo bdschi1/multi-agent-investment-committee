@@ -2,7 +2,6 @@
 .env
 .env.*
 !.env.example
-brad.txt
 
 # ── Python bytecode and packaging ───────────────────────────────
 __pycache__/
@@ -64,3 +63,6 @@ runs/
 exports/
 results/
 outputs/
+
+# ── Claude Code project memory ────────────────────────────────
+.claude/

@@ -76,7 +76,7 @@ class Settings(BaseSettings):
         description="Ollama server URL",
     )
     ollama_model: str = Field(
-        default="llama3.1:8b",
+        default="llama3.2:3b",
         description="Ollama model name (must be pulled first)",
     )
 
@@ -88,6 +88,20 @@ class Settings(BaseSettings):
         description="Max dynamic tool calls per agent per run (0 disables tool calling)",
     )
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature")
+
+    # --- Rate Limiting (Anthropic Tier 1 — 85% of actual limits for safety margin) ---
+    rate_limit_rpm: int = Field(
+        default=45, ge=0,
+        description="Max requests per minute for rate-limited providers (0 = no limit)",
+    )
+    rate_limit_input_tpm: int = Field(
+        default=25000, ge=0,
+        description="Max input tokens per minute for rate-limited providers (0 = no limit)",
+    )
+    rate_limit_output_tpm: int = Field(
+        default=7000, ge=0,
+        description="Max output tokens per minute for rate-limited providers (0 = no limit)",
+    )
 
     # --- Application ---
     log_level: str = Field(default="INFO", description="Logging level")

@@ -4,21 +4,23 @@ build-backend = "hatchling.build"
 
 [project]
 name = "multi-agent-investment-committee"
-version = "1.0.0"
-description = "Multi-agent investment committee: autonomous agents that reason, debate, and synthesize investment theses"
+version = "3.5.0"
+description = "Multi-agent investment committee: autonomous agents that reason, debate, and synthesize investment theses with document KB upload, sentiment extraction, quant portfolio construction heuristics, and RL-ready T signal"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 authors = [
     {name = "Your Name"},
 ]
-keywords = ["ai", "agents", "multi-agent", "investment", "reasoning", "smolagents", "langgraph"]
+keywords = ["ai", "agents", "multi-agent", "investment", "reasoning", "langgraph", "sentiment", "volatility", "reinforcement-learning"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business :: Financial :: Investment",
 ]
 
 dependencies = [
@@ -55,11 +57,19 @@ langgraph = [
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
 ]
+docs = [
+    "pypdf>=4.0.0",
+    "python-docx>=1.0.0",
+    "tiktoken>=0.7.0",
+]
 all = [
     "openai>=1.50.0",
     "ollama>=0.4.0",
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.0.0",
+    "tiktoken>=0.7.0",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -21,7 +21,7 @@ tags:
 
 **Four autonomous AI agents that reason, debate, and synthesize investment theses — with document KB upload, sentiment extraction, volatility-aware trading logic, quantitative portfolio construction heuristics, and an RL-ready T signal.**
 
-This project demonstrates production-grade multi-agent orchestration applied to investment analysis — not a chatbot wrapper, but agents that *think, plan, act, and reflect* through structured reasoning chains with adversarial debate, user-uploaded research documents, news sentiment processing, return decomposition, factor-aware positioning, risk-adjusted sizing, and entropy-adjusted confidence signaling.
+This project demonstrates production-grade multi-agent orchestration applied to investment analysis — not a wrapper, but agents that *think, plan, act, and reflect* through structured reasoning chains with adversarial debate, user-uploaded research documents, news sentiment processing, return decomposition, factor-aware positioning, risk-adjusted sizing, and entropy-adjusted confidence signaling.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)

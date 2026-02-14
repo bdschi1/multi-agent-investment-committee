@@ -62,6 +62,12 @@ docs = [
     "python-docx>=1.0.0",
     "tiktoken>=0.7.0",
 ]
+bloomberg = [
+    "blpapi>=3.19.0",
+]
+ibkr = [
+    "ib_insync>=0.9.86",
+]
 all = [
     "openai>=1.50.0",
     "ollama>=0.4.0",

@@ -1,9 +1,13 @@
 """
-Earnings data tool using yfinance.
+Earnings data tool — provider-agnostic.
 
 Retrieves earnings history with surprise data — how often and
 by how much a company beats or misses estimates. Consistent
 beat patterns signal execution quality; misses signal risk.
+
+Uses the active data provider via the shared abstraction layer.
+Note: Earnings surprise data is primarily available via Yahoo Finance.
+Bloomberg and IB providers will return limited results gracefully.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import yfinance as yf
+from tools.market_data import _get_default_provider
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +34,13 @@ class EarningsDataTool:
         Returns:
             Dict with quarterly earnings, surprise stats, and trend assessment.
         """
-        try:
-            stock = yf.Ticker(ticker)
+        provider = _get_default_provider()
 
-            # Get earnings history (estimates vs actuals)
-            earnings_df = stock.earnings_history
-            if earnings_df is None or earnings_df.empty:
+        try:
+            earnings_df = provider.get_earnings_history(ticker)
+            if earnings_df is None or (hasattr(earnings_df, "empty") and earnings_df.empty):
                 # Fallback: try quarterly earnings
-                return EarningsDataTool._fallback_earnings(ticker, stock)
+                return EarningsDataTool._fallback_earnings(ticker)
 
             quarters = []
             beats = 0
@@ -107,7 +110,7 @@ class EarningsDataTool:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get earnings data for {ticker}: {e}")
+            logger.error("Failed to get earnings data for %s: %s", ticker, e)
             return {
                 "ticker": ticker,
                 "quarters": [],
@@ -117,17 +120,19 @@ class EarningsDataTool:
             }
 
     @staticmethod
-    def _fallback_earnings(ticker: str, stock: Any) -> dict[str, Any]:
+    def _fallback_earnings(ticker: str) -> dict[str, Any]:
         """Fallback: use quarterly earnings (revenue/earnings) if history unavailable."""
+        provider = _get_default_provider()
+
         try:
-            qe = stock.quarterly_earnings
-            if qe is None or qe.empty:
+            qe = provider.get_quarterly_earnings(ticker)
+            if qe is None or (hasattr(qe, "empty") and qe.empty):
                 return {
                     "ticker": ticker,
                     "quarters": [],
                     "summary": {"total_quarters": 0},
                     "trend": "no_data",
-                    "note": "No earnings history available",
+                    "note": f"No earnings history available (provider: {provider.name})",
                 }
 
             quarters = []

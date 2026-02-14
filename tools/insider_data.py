@@ -1,9 +1,13 @@
 """
-Insider data tool using yfinance.
+Insider data tool — provider-agnostic.
 
 Retrieves insider transactions (buys, sells) and computes
 net insider sentiment — a powerful signal when insiders
 are buying or selling their own stock in size.
+
+Uses the active data provider via the shared abstraction layer.
+Note: Insider transaction data is primarily available via Yahoo Finance.
+Bloomberg and IB providers will return empty results gracefully.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import yfinance as yf
+from tools.market_data import _get_default_provider
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +35,11 @@ class InsiderDataTool:
         Returns:
             Dict with transactions list, summary stats, and net sentiment.
         """
-        try:
-            stock = yf.Ticker(ticker)
+        provider = _get_default_provider()
 
-            # Get insider transactions
-            insider_df = stock.insider_transactions
-            if insider_df is None or insider_df.empty:
+        try:
+            insider_df = provider.get_insider_transactions(ticker)
+            if insider_df is None or (hasattr(insider_df, "empty") and insider_df.empty):
                 return {
                     "ticker": ticker,
                     "transactions": [],
@@ -47,7 +50,7 @@ class InsiderDataTool:
                         "net_shares": 0,
                     },
                     "net_sentiment": "neutral",
-                    "note": "No insider transaction data available",
+                    "note": f"No insider transaction data available (provider: {provider.name})",
                 }
 
             # Process transactions
@@ -111,7 +114,7 @@ class InsiderDataTool:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get insider data for {ticker}: {e}")
+            logger.error("Failed to get insider data for %s: %s", ticker, e)
             return {
                 "ticker": ticker,
                 "transactions": [],

@@ -1,9 +1,12 @@
 """
-Peer comparison tool using yfinance.
+Peer comparison tool — provider-agnostic.
 
 Compares a stock against sector peers on key fundamental metrics.
 Enables agents to assess relative valuation, growth, and quality
 vs. competitors — a core part of equity analysis.
+
+Uses the active data provider (Yahoo Finance, Bloomberg, or IB)
+via the shared provider abstraction layer.
 """
 
 from __future__ import annotations
@@ -11,11 +14,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import yfinance as yf
+from tools.market_data import _get_default_provider
 
 logger = logging.getLogger(__name__)
 
-# Fallback peer groups by sector (used when yfinance doesn't provide peers)
+# Fallback peer groups by sector (used when provider doesn't provide peers)
 _SECTOR_PEERS: dict[str, list[str]] = {
     "Technology": ["AAPL", "MSFT", "GOOGL", "META", "NVDA", "CRM", "ADBE", "ORCL"],
     "Healthcare": ["JNJ", "UNH", "PFE", "ABBV", "MRK", "LLY", "TMO", "ABT"],
@@ -51,9 +54,10 @@ class PeerComparisonTool:
         Returns:
             Dict with target stock metrics, peer metrics, and relative positioning.
         """
+        provider = _get_default_provider()
+
         try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
+            info = provider.get_info(ticker)
             sector = info.get("sector", "Unknown")
 
             # Get peer list
@@ -69,11 +73,11 @@ class PeerComparisonTool:
             peer_metrics = []
             for peer_ticker in peers:
                 try:
-                    peer_info = yf.Ticker(peer_ticker).info
+                    peer_info = provider.get_info(peer_ticker)
                     metrics = PeerComparisonTool._extract_metrics(peer_ticker, peer_info)
                     peer_metrics.append(metrics)
                 except Exception as e:
-                    logger.warning(f"Failed to fetch peer {peer_ticker}: {e}")
+                    logger.warning("Failed to fetch peer %s: %s", peer_ticker, e)
                     continue
 
             # Compute relative positioning
@@ -89,7 +93,7 @@ class PeerComparisonTool:
             }
 
         except Exception as e:
-            logger.error(f"Peer comparison failed for {ticker}: {e}")
+            logger.error("Peer comparison failed for %s: %s", ticker, e)
             return {"ticker": ticker, "error": str(e), "peers": []}
 
     @staticmethod
@@ -100,7 +104,7 @@ class PeerComparisonTool:
 
     @staticmethod
     def _extract_metrics(ticker: str, info: dict) -> dict[str, Any]:
-        """Extract comparable metrics from yfinance info dict."""
+        """Extract comparable metrics from provider info dict."""
         return {
             "ticker": ticker,
             "name": info.get("longName", info.get("shortName", ticker)),

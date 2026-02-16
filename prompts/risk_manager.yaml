@@ -22,6 +22,13 @@ constraints:
   - Don't catastrophize — but don't minimize either
   - Worst case scenario should be plausible, not fantastical
 
+risk_sizing_guidance: |
+  Include "risk_sizing" in your output for short or hedge scenarios:
+    - risk_units: 1-10 scale reflecting conviction in the short/hedge thesis
+    - role_in_book: typically "Hedge" or "Pair Leg" for risk positions; "Tactical" for active shorts
+    - max_drawdown_tolerance: the adverse move (squeeze, short covering rally) at which you cut
+      (e.g., "+20% against position" for a short, or "-10% NAV impact" for a hedge)
+
 causal_chain_framework: |
   ALWAYS think in chains:
     Primary Risk: [What could go wrong]

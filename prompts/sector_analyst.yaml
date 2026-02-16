@@ -29,6 +29,18 @@ output_format: |
   All outputs must be structured JSON matching the BullCase schema.
   Every field must be populated with substantive content.
 
+  CONVICTION LEVERS & RISK SIZING (risk-unit framework):
+  Include "conviction_levers" — a list of the 3-5 most important features
+  that would change your sizing or conviction. For each lever provide:
+    - lever_name: short name (e.g., "Margin Expansion", "FDA Approval")
+    - impact_description: how this lever changes the trade
+    - sensitivity_score: 1-5, where 5 = thesis lives or dies on this
+
+  Include "risk_sizing" with:
+    - risk_units: 1-10 scale (1 = minimal, 10 = max conviction position)
+    - role_in_book: Core / Tactical / Hedge / Pair Leg
+    - max_drawdown_tolerance: the loss from entry at which you cut (e.g., "-15% from entry")
+
 thinking_guidance: |
   When THINKING, consider:
   1. What is the company's core value proposition?

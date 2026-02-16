@@ -146,6 +146,15 @@ class BullCase(BaseModel):
         default="",
         description="Heuristic Sortino + reasoning (e.g. '0.64 — 14% idio / 22% downside vol; downside limited by asset floor')",
     )
+    # Risk-unit framework (ported from llm-long-short-arena)
+    conviction_levers: list[ConvictionLever] = Field(
+        default_factory=list,
+        description="Key levers that change sizing/conviction (e.g., margins, FDA outcome, guidance revision)",
+    )
+    risk_sizing: RiskSizing | None = Field(
+        default=None,
+        description="Position sizing in risk units with role-in-book and drawdown tolerance",
+    )
 
 
 class BearCase(BaseModel):
@@ -167,6 +176,11 @@ class BearCase(BaseModel):
     technical_levels: dict[str, Any] = Field(
         default_factory=dict,
         description="Key technical levels: support, resistance, breakdown triggers",
+    )
+    # Risk-unit framework (ported from llm-long-short-arena)
+    risk_sizing: RiskSizing | None = Field(
+        default=None,
+        description="Short/hedge sizing in risk units with drawdown triggers",
     )
 
 
@@ -265,6 +279,52 @@ class MacroView(BaseModel):
             "Vol targeting controls risk better than GMV targeting because "
             "volatility is persistent and partially predictable."
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Risk-unit framework (ported from llm-long-short-arena)
+# ---------------------------------------------------------------------------
+
+class ConvictionLever(BaseModel):
+    """A feature that changes position sizing or conviction.
+
+    Institutional PMs think in terms of levers — specific developments
+    that move a position from Tactical to Core, or trigger a cut.
+    Each lever has a sensitivity score indicating how thesis-dependent
+    the position is on that particular factor.
+    """
+
+    lever_name: str = Field(
+        ..., description="Name of the feature (e.g., 'Margins', 'FDA Approval')"
+    )
+    impact_description: str = Field(
+        ..., description="How this lever changes sizing/conviction"
+    )
+    sensitivity_score: int = Field(
+        ge=1, le=5, description="1-5: How sensitive is the thesis to this lever?"
+    )
+
+
+class RiskSizing(BaseModel):
+    """Position sizing in risk units with drawdown tolerance.
+
+    Risk units (1-10 scale) abstract away dollar amounts, focusing
+    on relative portfolio risk budget. ``role_in_book`` classifies the
+    position's strategic purpose; ``max_drawdown_tolerance`` defines
+    the loss threshold that triggers a cut.
+    """
+
+    risk_units: float = Field(
+        ge=0.0, le=10.0, description="Proposed size in risk units (1-10 scale)"
+    )
+    role_in_book: str = Field(
+        default="Tactical",
+        description="Core / Tactical / Hedge / Pair Leg",
+    )
+    max_drawdown_tolerance: str = Field(
+        default="",
+        description="At what drawdown do you cut? (e.g., '-15% from entry')",
     )
 
 

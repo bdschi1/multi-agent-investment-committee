@@ -6,6 +6,8 @@ Adapted from the local chunker project (bds_repos). Provides:
 - Chunking decision: small files injected whole, large files chunked
 - Token-aware chunking: respects LLM context limits with tiktoken
 - Boilerplate removal: strips disclosure sections from equity research
+- Smart page scoring: importance-ranked page selection for large PDFs
+- Prompt injection defense: 8-pattern sanitization on all extracted text
 
 The processed KB is injected into agent context as supplementary research.
 Agents treat it as one resource among many — they rely on their own judgment.
@@ -18,6 +20,8 @@ import logging
 import re
 from pathlib import Path
 from typing import Any
+
+from tools.sanitize import sanitize_document_text
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,120 @@ except ImportError:
 
     def _count_tokens(text: str) -> int:
         return len(text.split()) * 4 // 3  # rough 1.33 tokens/word estimate
+
+
+# ---------------------------------------------------------------------------
+# Smart page scoring (ported from llm-long-short-arena)
+# ---------------------------------------------------------------------------
+
+_HIGH_VALUE_HEADERS = re.compile(
+    r"(executive\s+summary|investment\s+(thesis|summary|conclusion)"
+    r"|key\s+(findings|takeaways|drivers|risks)"
+    r"|financial\s+(summary|highlights|overview)"
+    r"|valuation|price\s+target|recommendation"
+    r"|conclusion|risk\s+factors|catalysts"
+    r"|earnings|revenue|guidance|outlook)",
+    re.IGNORECASE,
+)
+
+# Large-PDF char threshold: if total extracted chars exceed this, apply
+# importance-scored page selection instead of using every page.
+_SMART_TRUNCATE_CHAR_LIMIT = 60_000
+
+
+def _score_page(text: str, has_tables: bool = False) -> float:
+    """Heuristic importance score for a PDF page (higher = more important).
+
+    Scoring rules (ported from llm-long-short-arena ``_score_page``):
+    - +3.0 for pages containing high-value section headers
+    - +2.0 for pages with tables (likely financials)
+    - +1.5 for pages with >5% digit density (quantitative content)
+    - -2.0 for very short pages (<200 chars — cover pages, disclaimers)
+    """
+    score = 1.0
+
+    if _HIGH_VALUE_HEADERS.search(text):
+        score += 3.0
+
+    if has_tables:
+        score += 2.0
+
+    digit_ratio = sum(c.isdigit() for c in text) / max(len(text), 1)
+    if digit_ratio > 0.05:
+        score += 1.5
+
+    if len(text) < 200:
+        score -= 2.0
+
+    return score
+
+
+def _smart_select_pages(
+    pages: list[dict],
+    char_limit: int = _SMART_TRUNCATE_CHAR_LIMIT,
+) -> str:
+    """Build the best possible text within *char_limit* using importance scoring.
+
+    Strategy (ported from llm-long-short-arena ``smart_truncate``):
+    - Always include the first 2 pages (context/intro) and last page
+    - Fill remaining budget with highest-scored pages in document order
+    - Sanitize the combined result against prompt injection
+    """
+    if not pages:
+        return ""
+
+    total_chars = sum(p["chars"] for p in pages)
+
+    # Everything fits — concatenate, sanitize, return
+    if total_chars <= char_limit:
+        combined = "\n\n".join(p["text"] for p in pages)
+        return sanitize_document_text(combined)
+
+    logger.info(
+        "PDF exceeds char limit (%d > %d), applying smart page selection",
+        total_chars,
+        char_limit,
+    )
+
+    # Reserve slots for first 2 and last page
+    must_include: set[int] = set()
+    for i in range(min(2, len(pages))):
+        must_include.add(i)
+    must_include.add(len(pages) - 1)
+
+    # Score remaining pages
+    scored = []
+    for i, page in enumerate(pages):
+        if i not in must_include:
+            scored.append((i, _score_page(page["text"], page.get("has_tables", False))))
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # Build selection within budget
+    selected_indices = set(must_include)
+    budget = char_limit - sum(pages[i]["chars"] for i in must_include)
+
+    for idx, _sc in scored:
+        if budget <= 0:
+            break
+        if pages[idx]["chars"] <= budget:
+            selected_indices.add(idx)
+            budget -= pages[idx]["chars"]
+
+    # Reassemble in document order
+    selected = sorted(selected_indices)
+    parts = [pages[i]["text"] for i in selected]
+
+    skipped = len(pages) - len(selected)
+    if skipped > 0:
+        logger.info(
+            "Smart page selection: kept %d/%d pages (skipped %d low-value pages)",
+            len(selected),
+            len(pages),
+            skipped,
+        )
+
+    combined = "\n\n".join(parts)
+    return sanitize_document_text(combined)
 
 
 # ---------------------------------------------------------------------------
@@ -101,12 +219,25 @@ def _read_pdf(path: Path, page_range: str | None = None) -> str:
             )
             return ""
 
-        pages = [reader.pages[i].extract_text() or "" for i in indices]
+        # Extract per-page text with metadata for smart scoring
+        extracted: list[dict] = []
+        for i in indices:
+            text = reader.pages[i].extract_text() or ""
+            extracted.append({"page": i + 1, "text": text, "chars": len(text)})
+
         logger.info(
             f"PDF {path.name}: extracted {len(indices)}/{total} pages "
             f"(pages {indices[0]+1}-{indices[-1]+1})"
         )
-        return "\n\n".join(pages)
+
+        total_chars = sum(p["chars"] for p in extracted)
+
+        # Large PDF → smart page selection with importance scoring
+        if total_chars > _SMART_TRUNCATE_CHAR_LIMIT:
+            return _smart_select_pages(extracted)
+
+        # Normal PDF → concatenate and sanitize
+        return sanitize_document_text("\n\n".join(p["text"] for p in extracted))
     except Exception as e:
         logger.warning(f"Failed to read PDF {path.name}: {e}")
         return ""
@@ -123,7 +254,7 @@ def _read_docx(path: Path) -> str:
     try:
         doc = Document(str(path))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-        return "\n\n".join(paragraphs)
+        return sanitize_document_text("\n\n".join(paragraphs))
     except Exception as e:
         logger.warning(f"Failed to read DOCX {path.name}: {e}")
         return ""
@@ -132,7 +263,7 @@ def _read_docx(path: Path) -> str:
 def _read_txt(path: Path) -> str:
     """Read a plain text file."""
     try:
-        return path.read_text(errors="ignore")
+        return sanitize_document_text(path.read_text(errors="ignore"))
     except Exception as e:
         logger.warning(f"Failed to read TXT {path.name}: {e}")
         return ""

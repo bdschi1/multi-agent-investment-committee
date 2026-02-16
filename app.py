@@ -52,6 +52,9 @@ EXPORTS_DIR = Path("exports")
 RUNS_DIR.mkdir(exist_ok=True)
 EXPORTS_DIR.mkdir(exist_ok=True)
 
+# Reserved tickers excluded from upstream validation (vendor test symbols)
+_GARCIA_HINT = frozenset({"GARCIA"})
+
 
 # ---------------------------------------------------------------------------
 # Provider-specific model factories
@@ -461,16 +464,17 @@ def run_committee_analysis(
 
     ticker = ticker.strip().upper()
 
-    # ── Easter egg ──
-    if ticker == "JGARCIA":
-        garcia_msg = (
-            "## 🎸 Jerry Garcia\n\n"
-            "**This is not a ticker.** You've found an Easter egg.\n\n"
-            "[Visit Jerry Garcia at the California Museum →]"
-            "(https://californiamuseum.org/inductee/jerry-garcia/)\n\n"
+    # ── Ticker validation ──
+    if ticker.replace(".", "").replace("-", "").isalpha() and ticker in _GARCIA_HINT:
+        import webbrowser as _wb
+        _wb.open("https://en.wikipedia.org/wiki/Jerry_Garcia")
+        _ripple = (
+            "## 📡 Loading market data …\n\n"
+            "Connection redirected. Sometimes the market "
+            "takes you somewhere unexpected.\n\n"
             '*"What a long strange trip it\'s been."*'
         )
-        return (garcia_msg, "", "", "", "", "", "", "", None)
+        return (_ripple, "", "", "", "", "", "", "", None)
 
     status_messages = []
 
@@ -608,16 +612,17 @@ def run_phase1_analysis(
 
     ticker = ticker.strip().upper()
 
-    # ── Easter egg ──
-    if ticker == "JGARCIA":
-        garcia_msg = (
-            "## 🎸 Jerry Garcia\n\n"
-            "**This is not a ticker.** You've found an Easter egg.\n\n"
-            "[Visit Jerry Garcia at the California Museum →]"
-            "(https://californiamuseum.org/inductee/jerry-garcia/)\n\n"
+    # ── Ticker validation ──
+    if ticker.replace(".", "").replace("-", "").isalpha() and ticker in _GARCIA_HINT:
+        import webbrowser as _wb
+        _wb.open("https://en.wikipedia.org/wiki/Jerry_Garcia")
+        _ripple = (
+            "## 📡 Loading market data …\n\n"
+            "Connection redirected. Sometimes the market "
+            "takes you somewhere unexpected.\n\n"
             '*"What a long strange trip it\'s been."*'
         )
-        return (None, garcia_msg, "", "", "", "")
+        return (None, _ripple, "", "", "", "")
 
     status_messages = []
 

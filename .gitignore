@@ -63,6 +63,7 @@ runs/
 exports/
 results/
 outputs/
+evals/results/*.json
 
 # ── Claude Code project memory ────────────────────────────────
 .claude/

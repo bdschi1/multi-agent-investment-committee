@@ -42,8 +42,47 @@ except ImportError:
 # File readers — PDF, DOCX, TXT
 # ---------------------------------------------------------------------------
 
-def _read_pdf(path: Path) -> str:
-    """Extract text from a PDF file."""
+def _parse_page_range(page_range: str | None, total_pages: int) -> list[int]:
+    """
+    Parse a page range string into a sorted list of 0-based page indices.
+
+    Accepts human-friendly 1-based page numbers in these formats:
+        "5"         → single page
+        "1-10"      → inclusive range
+        "1-5,8,12-15" → mixed ranges and singles
+
+    Returns sorted, deduplicated list of 0-based indices clamped to [0, total_pages).
+    Returns all pages if page_range is None or empty.
+    """
+    if not page_range:
+        return list(range(total_pages))
+
+    indices: set[int] = set()
+    for part in page_range.split(","):
+        part = part.strip()
+        if "-" in part:
+            start_s, end_s = part.split("-", 1)
+            start = max(int(start_s.strip()) - 1, 0)
+            end = min(int(end_s.strip()), total_pages)  # end is exclusive after -1+1
+            indices.update(range(start, end))
+        else:
+            idx = int(part) - 1
+            if 0 <= idx < total_pages:
+                indices.add(idx)
+
+    return sorted(indices)
+
+
+def _read_pdf(path: Path, page_range: str | None = None) -> str:
+    """
+    Extract text from a PDF file.
+
+    Args:
+        path: Path to the PDF.
+        page_range: Optional page selection string (1-based, human-friendly).
+                    Examples: "5", "1-10", "1-5,8,12-15".
+                    None or "" reads all pages.
+    """
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -52,7 +91,21 @@ def _read_pdf(path: Path) -> str:
 
     try:
         reader = PdfReader(str(path))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        total = len(reader.pages)
+        indices = _parse_page_range(page_range, total)
+
+        if not indices:
+            logger.warning(
+                f"Page range '{page_range}' produced no valid pages "
+                f"(PDF has {total} pages)"
+            )
+            return ""
+
+        pages = [reader.pages[i].extract_text() or "" for i in indices]
+        logger.info(
+            f"PDF {path.name}: extracted {len(indices)}/{total} pages "
+            f"(pages {indices[0]+1}-{indices[-1]+1})"
+        )
         return "\n\n".join(pages)
     except Exception as e:
         logger.warning(f"Failed to read PDF {path.name}: {e}")
@@ -174,7 +227,10 @@ def _chunk_text(text: str) -> list[str]:
 MAX_FILES = 5
 
 
-def process_uploads(file_paths: list[str | Path]) -> list[dict[str, Any]]:
+def process_uploads(
+    file_paths: list[str | Path],
+    page_range: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Process uploaded files into a knowledge base for agent consumption.
 
@@ -184,6 +240,9 @@ def process_uploads(file_paths: list[str | Path]) -> list[dict[str, Any]]:
     Args:
         file_paths: List of file paths (up to MAX_FILES). Gradio gives
                     temporary paths after upload.
+        page_range: Optional page selection for PDFs (1-based, human-friendly).
+                    Examples: "5", "1-10", "1-5,8,12-15".
+                    None reads all pages. Ignored for non-PDF files.
 
     Returns:
         List of dicts, each with:
@@ -220,7 +279,11 @@ def process_uploads(file_paths: list[str | Path]) -> list[dict[str, Any]]:
                 })
                 continue
 
-            text = reader(path)
+            # Pass page_range to PDF reader; other readers ignore it
+            if ext == ".pdf":
+                text = reader(path, page_range=page_range)
+            else:
+                text = reader(path)
             if not text.strip():
                 logger.warning(f"Empty content from {path.name} — skipping")
                 kb_docs.append({

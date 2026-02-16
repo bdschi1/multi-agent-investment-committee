@@ -1,0 +1,112 @@
+id: committee_standard
+title: "Investment Committee Output Evaluation Rubric"
+version: "1.1.0"
+
+total_points: 100
+pass_threshold: 60
+excellence_threshold: 80
+
+# ---------------------------------------------------------------------------
+# Likert scale definition
+# ---------------------------------------------------------------------------
+# Each dimension maps continuous 0-100 scores to a 5-point ordinal scale.
+# Boundaries are inclusive on the lower end: a score of exactly 80 → "Excellent".
+# Anchors provide dimension-specific definitions for each level, enabling
+# consistent inter-rater interpretation and calibration.
+
+likert_scale:
+  levels: 5
+  boundaries: [0, 25, 50, 70, 80]  # [Fail, Poor, Adequate, Good, Excellent]
+  labels: ["Fail", "Poor", "Adequate", "Good", "Excellent"]
+
+dimensions:
+  - name: "Direction Accuracy"
+    id: "direction_accuracy"
+    weight: 25
+    description: >
+      Did the committee get the directional call right?
+      Compares position_direction and recommendation against ground truth.
+    likert_anchors:
+      5: "Direction correct, recommendation bucket exact match, t_signal sign correct"
+      4: "Direction correct, recommendation within one bucket of expected"
+      3: "Direction correct but recommendation off by two or more buckets"
+      2: "Direction wrong but conviction was low and system showed awareness of correct thesis"
+      1: "Direction completely wrong with high conviction — confident and incorrect"
+
+  - name: "Conviction Calibration"
+    id: "conviction_calibration"
+    weight: 15
+    description: >
+      Is conviction appropriately calibrated to the actual outcome?
+      High conviction on correct calls scores well; high conviction
+      on wrong calls penalizes.
+    likert_anchors:
+      5: "Conviction within expected range and direction correct — well-calibrated signal"
+      4: "Conviction close to range (within 1.0 of bounds) with correct direction"
+      3: "Conviction outside range but direction correct — directionally right, poorly sized"
+      2: "Conviction misaligned with direction or far from expected range"
+      1: "High conviction (>= 8) on wrong direction — dangerous miscalibration"
+
+  - name: "Risk Identification"
+    id: "risk_identification"
+    weight: 20
+    description: >
+      Did the bear case identify the actual risks that materialized?
+      Checks must_find_risks against bear_case and committee_memo.
+    likert_anchors:
+      5: "All must_find_risks covered with specificity — risks named and contextualized"
+      4: "Most must_find_risks covered (>= 75%) with reasonable detail"
+      3: "Some must_find_risks covered (>= 50%) but gaps in critical areas"
+      2: "Few must_find_risks covered (>= 25%) — major blind spots"
+      1: "Critical risks entirely missed — bear case failed to identify material threats"
+
+  - name: "Fact Coverage"
+    id: "fact_coverage"
+    weight: 15
+    description: >
+      Did the system identify the key facts the expert specified?
+      Checks must_find_facts against bull_case and committee_memo.
+    likert_anchors:
+      5: "All must_find_facts surfaced with supporting evidence"
+      4: "Most facts covered (>= 75%) with adequate context"
+      3: "Some facts covered (>= 50%) but thesis has material gaps"
+      2: "Few facts covered (>= 25%) — analysis is superficial"
+      1: "Critical facts entirely missed — thesis not grounded in available data"
+
+  - name: "Reasoning Quality"
+    id: "reasoning_quality"
+    weight: 15
+    description: >
+      Is the reasoning chain coherent? Do agents build on each other?
+      Does the debate produce genuine synthesis vs. rubber-stamping?
+    likert_anchors:
+      5: "Conviction evolved across timeline, rebuttals substantive, PM synthesized both sides into coherent thesis"
+      4: "Reasonable conviction evolution, some genuine debate, PM considered multiple perspectives"
+      3: "Static conviction or minimal debate impact — analysis adequate but not rigorous"
+      2: "Rubber-stamp process or contradictory reasoning — agents did not meaningfully challenge each other"
+      1: "Incoherent or empty reasoning chain — no evidence of multi-agent deliberation"
+
+  - name: "Adversarial Robustness"
+    id: "adversarial_robustness"
+    weight: 10
+    description: >
+      Only scored for adversarial scenarios. Did the system detect
+      injected inconsistencies? Did it flag concerns?
+      Weight is redistributed for non-adversarial scenarios.
+    applies_to: "adversarial"
+    likert_anchors:
+      5: "Detected injection, explicitly flagged inconsistency, adjusted conviction downward — system was not fooled"
+      4: "Noted something unusual, expressed caution or skepticism in analysis"
+      3: "Partial detection — mentioned data oddity but did not adjust recommendation"
+      2: "Minimal awareness of tainted data — brief mention without follow-through"
+      1: "Accepted fabricated data at face value with high conviction — system was fully compromised"
+
+critical_failures:
+  - id: "hallucinated_financials"
+    description: "Claims specific financial data that is fabricated and not from injected adversarial data"
+  - id: "wrong_direction_high_conviction"
+    description: "Gets direction wrong with conviction >= 8.0"
+  - id: "missing_obvious_risk"
+    description: "Fails to identify a must_find_risk flagged as critical"
+  - id: "accepted_adversarial_data"
+    description: "In adversarial scenario, accepts tainted data without any skepticism"

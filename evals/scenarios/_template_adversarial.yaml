@@ -1,0 +1,109 @@
+# ===========================================================================
+# Eval Scenario Template — Adversarial
+# ===========================================================================
+#
+# HOW TO USE:
+#   1. Copy this file and rename it: adversarial_<short_description>.yaml
+#   2. Fill in all required fields (id, title, ticker, etc.)
+#   3. Define the adversarial injection in the "adversarial" section:
+#      - manipulation_type: category of attack
+#      - context_injections: fabricated data merged into the pipeline
+#      - expected_behavior: what the system SHOULD do
+#      - failure_signals: phrases indicating the system was fooled
+#   4. Replace every TODO comment with expert-provided values
+#   5. Files prefixed with "_" are skipped by the loader — remove the
+#      underscore prefix when your scenario is ready for use
+#   6. Validate with: python -m evals --validate <your_file>.yaml
+#
+# MANIPULATION TYPES:
+#   - inflated_fundamentals: fabricated earnings/revenue/margins
+#   - fake_news: injected news headlines with false information
+#   - contradictory_data: conflicting signals across data sources
+#   - authority_anchor: fake analyst ratings or price targets
+#   - stale_data_injection: outdated data presented as current
+#
+# ===========================================================================
+
+id: "adversarial_change_me"             # unique snake_case identifier
+title: "Adversarial — Descriptive Title"
+version: "1.0.0"
+type: "adversarial"
+difficulty: "hard"                      # adversarial scenarios are typically hard
+
+ticker: "XXXX"
+as_of_date: "YYYY-MM-DD"
+as_of_context: >
+  Describe the baseline market context. The adversarial injection will
+  layer fabricated data on top of this real context.
+
+tags:
+  - adversarial
+  - theme_tag
+
+# ---------------------------------------------------------------------------
+# Adversarial Configuration
+# ---------------------------------------------------------------------------
+adversarial:
+  manipulation_type: "inflated_fundamentals"  # TODO: set manipulation category
+  description: >
+    TODO: Describe what is being injected and why the system should
+    catch it. Be specific about the inconsistency the system should detect.
+
+  context_injections:
+    # Keys here map to DataAggregator context sections.
+    # The injected values will be merged into the pipeline data.
+    financial_metrics:                  # TODO: define fabricated metrics
+      revenue_growth: "TODO"
+      operating_margin: "TODO"
+    news:                               # TODO: define fabricated news items
+      - headline: "TODO: fabricated headline"
+        source: "Fabricated News Wire"
+        date: "YYYY-MM-DD"
+        summary: "TODO: fabricated summary"
+
+  expected_behavior:
+    should_flag_inconsistency: true     # TODO: should the system flag data conflicts?
+    should_question_data_source: true   # TODO: should the system question source reliability?
+    expected_signals:                   # TODO: concepts/phrases the system should surface
+      - "TODO: expected signal 1"
+      - "TODO: expected signal 2"
+
+  failure_signals:                      # phrases indicating the system was fooled
+    - "TODO: failure signal 1"
+    - "TODO: failure signal 2"
+
+# ---------------------------------------------------------------------------
+# Ground Truth — Expert fills in all TODO fields
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 0                 # TODO: set to +1 (long), -1 (short), or 0 (flat/avoid)
+  expected_recommendation_bucket: "HOLD"  # TODO: expected recommendation given tainted data
+  conviction_range: [0.0, 10.0]         # TODO: narrow to expected conviction range
+  actual_outcome: null                  # TODO: describe what actually happened
+  actual_return_pct: null               # TODO: actual return over the evaluation horizon
+  must_find_facts:                      # TODO: list key facts the system should surface
+    - "TODO: fact 1"
+  must_find_risks:                      # TODO: list key risks the system should identify
+    - "TODO: data integrity risk"
+    - "TODO: risk 2"
+  must_not_claim:                       # TODO: list hallucinations / incorrect claims
+    - "TODO: claim based on fabricated data"
+  expert_reasoning_sketch: null         # TODO: brief expert thesis paragraph
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}               # optional: override rubric weights
+  critical_failures:
+    - "TODO: critical failure 1"
+    - "TODO: critical failure 2"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: ""
+  created_at: ""
+  notes: ""

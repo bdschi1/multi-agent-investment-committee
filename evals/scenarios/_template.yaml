@@ -1,0 +1,77 @@
+# ===========================================================================
+# Eval Scenario Template — Ground Truth
+# ===========================================================================
+#
+# HOW TO USE:
+#   1. Copy this file and rename it: <ticker>_<short_description>.yaml
+#   2. Fill in all required fields (id, title, ticker, etc.)
+#   3. Replace every TODO comment with expert-provided ground truth values
+#   4. Files prefixed with "_" are skipped by the loader — remove the
+#      underscore prefix when your scenario is ready for use
+#   5. Validate with: python -m evals --validate <your_file>.yaml
+#
+# FIELD REFERENCE:
+#   - expected_direction:  +1 (long), -1 (short), 0 (flat/avoid)
+#   - expected_recommendation_bucket:  one of STRONG BUY, BUY, HOLD,
+#       UNDERWEIGHT, SELL, ACTIVE SHORT, AVOID
+#   - conviction_range:  [min, max] on a 0-10 scale
+#   - must_find_facts:  key facts the system MUST surface
+#   - must_find_risks:  key risks the system MUST identify
+#   - must_not_claim:  statements that would be hallucinations / errors
+#   - expert_reasoning_sketch:  brief expert thesis for comparison
+#
+# ===========================================================================
+
+id: "change_me"                         # unique snake_case identifier
+title: "Change Me — Descriptive Title"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"                  # easy | moderate | hard
+
+ticker: "XXXX"
+as_of_date: "YYYY-MM-DD"               # point-in-time snapshot date
+as_of_context: >
+  Describe the market context at the as_of_date. Include relevant price
+  action, recent earnings, macro backdrop, and any catalysts or headwinds
+  the expert analyst would have known at that time.
+
+tags:
+  - sector_tag
+  - theme_tag
+
+# ---------------------------------------------------------------------------
+# Ground Truth — Expert fills in all TODO fields
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 0                 # TODO: set to +1 (long), -1 (short), or 0 (flat/avoid)
+  expected_recommendation_bucket: "HOLD"  # TODO: set to one of STRONG BUY / BUY / HOLD / UNDERWEIGHT / SELL / ACTIVE SHORT / AVOID
+  conviction_range: [0.0, 10.0]         # TODO: narrow to expected conviction range, e.g. [6.0, 9.0]
+  actual_outcome: null                  # TODO: describe what actually happened after as_of_date
+  actual_return_pct: null               # TODO: actual return over the evaluation horizon (e.g. 45.2)
+  must_find_facts:                      # TODO: list key facts the system should surface
+    - "TODO: fact 1"
+    - "TODO: fact 2"
+  must_find_risks:                      # TODO: list key risks the system should identify
+    - "TODO: risk 1"
+    - "TODO: risk 2"
+  must_not_claim:                       # TODO: list hallucinations / incorrect claims to watch for
+    - "TODO: incorrect claim 1"
+  expert_reasoning_sketch: null         # TODO: brief expert thesis paragraph
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}               # optional: override rubric weights for this scenario
+  critical_failures:                    # scenario-specific auto-fail conditions
+    - "TODO: critical failure 1"
+    - "TODO: critical failure 2"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: ""                            # who created this scenario
+  created_at: ""                        # ISO date
+  notes: ""

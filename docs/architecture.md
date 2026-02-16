@@ -1,158 +1,143 @@
-# Architecture Deep-Dive
+# Architecture
 
 ## Overview
 
-The Multi-Agent Investment Committee implements a structured multi-agent workflow where autonomous AI agents reason through an investment decision collaboratively, with adversarial tension built into the process.
+Four agents analyze a ticker through a LangGraph StateGraph. Three run in parallel (sector analyst, risk manager, macro strategist), bull and bear debate, then the portfolio manager synthesizes a committee memo with a T signal.
 
-This document explains the architectural choices, the reasoning protocol, and how the system is designed for extensibility.
+## Orchestration
+
+The pipeline is a LangGraph StateGraph defined in `orchestrator/graph.py`. Three graph variants exist:
+
+- **Full pipeline** -- data gathering -> parallel analysis -> debate -> PM synthesis
+- **Phase 1 only** -- stops after debate for human-in-the-loop review
+- **Phase 2 only** -- PM synthesis after human provides guidance
+
+Parallel fan-out uses LangGraph `Send`. The debate loop always runs (convergence is noted in output, not used to skip rounds). Non-serializable objects (model callable, callbacks, tool registry) flow through LangGraph's `RunnableConfig`, keeping `CommitteeState` serializable.
 
 ## Agent Reasoning Protocol
 
-Every agent follows a 4-step reasoning loop inspired by cognitive architectures:
+Every agent follows a 4-step loop:
 
 ```
-THINK → PLAN → ACT → REFLECT
+THINK -> PLAN -> ACT -> REFLECT
 ```
 
-### Why This Matters
+1. **THINK** -- form hypotheses, identify consensus view
+2. **PLAN** -- decide what to analyze, request tools
+3. **ACT** -- execute analysis against real data, produce structured output
+4. **REFLECT** -- self-critique, identify gaps, test conviction sensitivity
 
-Most "agent" demos are just prompt chains — input goes in, output comes out, with no visibility into *how* the model reached its conclusion. Our protocol forces:
-
-1. **Explicit hypothesis formation** (THINK) — the agent must articulate what it believes before gathering data
-2. **Structured planning** (PLAN) — the agent decides what to analyze before doing it
-3. **Grounded execution** (ACT) — analysis is performed against real data with structured outputs
-4. **Self-evaluation** (REFLECT) — the agent critiques its own work, identifying gaps and biases
-
-Every step is captured in a `ReasoningTrace` object with timestamps, token counts, and content — providing full observability into the agent's reasoning chain.
-
-## Orchestration Design
-
-### v1: Async Orchestrator (Current)
-
-The current implementation uses a custom async orchestrator that coordinates agents via `asyncio`:
-
-```python
-# Phase 1: Parallel analysis
-analyst_result, risk_result = await asyncio.gather(
-    analyst.run(ticker, context),
-    risk_mgr.run(ticker, context),
-)
-
-# Phase 2: Adversarial debate
-analyst_rebuttal, risk_rebuttal = await asyncio.gather(
-    analyst.rebut(ticker, bear_case, bull_case),
-    risk_mgr.rebut(ticker, bull_case, bear_case),
-)
-
-# Phase 3: PM synthesis (sequential — needs debate results)
-pm_result = await pm.run(ticker, synthesis_context)
-```
-
-### v2: LangGraph State Machine (Planned)
-
-The v2 migration will convert this into a LangGraph state graph where:
-- Each agent is a node
-- Edges represent data flow and conditional routing
-- Tool calls happen within graph nodes (not pre-gathered)
-- The debate can be modeled as a cycle with termination conditions
-
-The current architecture is designed for this migration:
-- Agents implement a consistent interface (`run`, `rebut`)
-- Output schemas are Pydantic models (serializable for graph state)
-- The model is injected as a callable (swappable)
+Each step is captured in a `ReasoningTrace` with timestamps and content. Traces are visible in the UI and stored in run output.
 
 ## Data Flow
 
 ```
-User Input
-    │
-    ▼
+User Input (ticker + guidance + optional docs)
+    |
+    v
 DataAggregator.gather_context()
-    ├── MarketDataTool.get_company_overview()
-    ├── MarketDataTool.get_price_data()
-    ├── MarketDataTool.get_fundamentals()
-    ├── NewsRetrievalTool.get_news()
-    ├── FinancialMetricsTool.compute_valuation_assessment()
-    └── FinancialMetricsTool.compute_quality_score()
-    │
-    ▼
-Unified Context Dict
-    │
-    ├──► Sector Analyst (parallel)
-    ├──► Risk Manager (parallel)
-    │
-    ▼
-Debate Round (parallel rebuttals)
-    │
-    ▼
-Portfolio Manager (sequential)
-    │
-    ▼
-CommitteeResult
+    |-- MarketDataTool (price, fundamentals, overview)
+    |-- NewsRetrievalTool (RSS feeds)
+    |-- FinancialMetricsTool (valuation, quality score)
+    |-- EarningsDataTool (beat/miss history)
+    |-- InsiderDataTool (SEC Form 4)
+    |-- PeerComparisonTool (peer valuation)
+    |-- DocChunker (uploaded PDF/DOCX/TXT)
+    |
+    v
+CommitteeState (typed dict with reducers)
+    |
+    +---> Sector Analyst (parallel)
+    +---> Risk Manager (parallel)
+    +---> Macro Strategist (parallel)
+    |
+    v
+Debate (bull vs bear rebuttals, configurable rounds)
+    |
+    v
+Portfolio Manager (sequential -- needs all prior output)
+    |
+    v
+CommitteeResult + T Signal
 ```
 
-### v1 vs v2 Data Strategy
+Agents invoke tools dynamically through the `ToolRegistry` with per-agent call budgets. The registry handles argument coercion (string args parsed to dicts/lists) and budget enforcement.
 
-**v1 (current):** Data is pre-gathered by `DataAggregator` and passed as context. Agents receive structured data but don't invoke tools dynamically. This is simpler and sufficient for demonstration.
+## State Management
 
-**v2 (planned):** Agents will invoke tools dynamically through LangGraph tool nodes. The Sector Analyst might decide mid-analysis that it needs peer comparison data and request it. This shows more sophisticated tool use but requires careful state management.
+`CommitteeState` is a TypedDict in `orchestrator/state.py`. Key fields:
 
-## Output Schema Design
+- `ticker`, `user_context`, `context` -- input data
+- `bull_case`, `bear_case`, `macro_view` -- agent outputs (Pydantic models)
+- `bull_rebuttal`, `bear_rebuttal` -- debate outputs
+- `committee_memo` -- PM synthesis
+- `conviction_timeline` -- list of ConvictionSnapshot objects tracking how convictions evolve
+- `reasoning_traces` -- per-agent traces
 
-All agent outputs are Pydantic models with strict validation:
+Reducer functions handle fan-in merging from parallel nodes. All agent outputs are Pydantic models with backward-compatible defaults.
 
-```python
-class BullCase(BaseModel):
-    ticker: str
-    thesis: str
-    supporting_evidence: list[str]
-    catalysts: list[str]
-    conviction_score: float = Field(ge=0.0, le=10.0)
-    time_horizon: str
-    key_metrics: dict[str, Any]
-```
+## Tool System
 
-This ensures:
-- **Downstream reliability:** The PM agent can always access `.conviction_score` without error handling
-- **UI consistency:** Gradio formatters always receive complete, typed data
-- **Testability:** Schemas can be validated in unit tests without LLM calls
+Tools are registered in `tools/registry.py`. Each tool is a callable with metadata (name, description, parameter schema). Agents request tools by name during the PLAN step. The registry:
 
-## Prompt Management
+- Validates tool exists
+- Checks per-agent budget
+- Coerces arguments (string -> dict/list parsing)
+- Returns structured results
 
-Prompts are externalized as YAML files in `/prompts/`:
+10 tools available: market data, news, financial metrics, earnings, insider transactions, peer comparison, plus document chunks.
 
-```yaml
-version: "1.0.0"
-role: sector_analyst
-persona: |
-  You are a senior sector analyst...
-constraints:
-  - Always ground analysis in available data
-  - Provide specific numbers...
-```
+## Data Providers
 
-This separation enables:
-- Prompt iteration without code changes
-- Version tracking for A/B testing
-- Team collaboration on prompt design
-- Clear audit trail of prompt evolution
+`tools/data_providers/` implements a provider abstraction:
 
-## Error Handling Strategy
+- `BaseDataProvider` (ABC) -- interface for price, fundamentals, overview
+- `YahooProvider` -- default, uses yfinance
+- `BloombergProvider` -- optional, uses blpapi
+- `IBProvider` -- optional, uses ib_insync
+- `ProviderFactory` -- runtime selection
 
-LLM outputs are inherently unreliable. The system handles this through:
+All tools use the provider abstraction. Switch with `set_provider("Bloomberg")` or install optional deps.
 
-1. **JSON extraction with fallbacks:** `_extract_json()` tries direct parse → markdown code block → brace matching
-2. **Fallback schema construction:** If parsing fails entirely, a valid but minimal schema is returned
-3. **Logging:** All parse failures are logged with the raw response for debugging
-4. **No crashes:** The committee will always produce *some* output, even if individual agents produce lower-quality results
+## Output Schemas
 
-## Testing Strategy
+All agent outputs are Pydantic models in `agents/base.py`:
 
-Tests are designed to run without API calls:
+- `BullCase` -- thesis, evidence, catalysts, conviction, sentiment factors, return decomposition
+- `BearCase` -- thesis, risks, causal chains, conviction, short pitch
+- `MacroView` -- vol regime, net exposure, sizing method, portfolio strategy
+- `CommitteeMemo` -- recommendation, conviction, T signal inputs, factor exposures, sizing rationale
 
-- **MockLLM:** Returns pre-defined JSON responses based on prompt keywords
-- **Schema tests:** Validate Pydantic models independently
-- **Integration tests:** Run the full committee with mocks
-- **Network tests:** Marked with `skipif` for CI environments
+Schemas have strict validation (e.g., conviction 0.0-10.0) with backward-compatible defaults for fields added in later versions. This guarantees downstream consumers (UI, eval harness, exports) never get partial data.
 
-This ensures CI runs fast and free while still validating the full pipeline logic.
+## Eval Harness
+
+`evals/` provides a ground-truth evaluation framework:
+
+- `schemas.py` -- EvalScenario, GroundTruth, GradingResult, LikertLevel
+- `grader.py` -- 6-dimension scoring (direction, conviction, risks, facts, reasoning, adversarial)
+- `adversarial.py` -- context injection engine that merges tainted data into real DataAggregator output
+- `loader.py` -- YAML scenario discovery with type/tag filtering
+- `runner.py` -- runs committee against scenarios, grades output
+- `reporter.py` -- JSON/markdown report generation
+
+Scoring uses 0-100 continuous scale per dimension with configurable weights. Each score maps to a Likert level (1-5) with dimension-specific anchor text from the rubric YAML.
+
+## Error Handling
+
+LLM output is unreliable. The system handles this through:
+
+1. JSON extraction with fallbacks: direct parse -> markdown code block -> brace matching
+2. Fallback schema construction: if parsing fails, a valid but minimal schema is returned
+3. Parse failure logging with raw response for debugging
+4. No crashes: the committee always produces output, even if individual agents produce lower-quality results
+
+## Testing
+
+200 tests, all run without API calls:
+
+- MockLLM returns pre-defined JSON based on prompt keywords
+- Schema tests validate Pydantic models independently
+- Integration tests run the full committee with mocks
+- Eval tests validate grading, loading, and schema logic
+- Network-dependent tests marked with `skipif` for CI

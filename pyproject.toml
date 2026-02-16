@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "multi-agent-investment-committee"
-version = "3.5.0"
-description = "Multi-agent investment committee: autonomous agents that reason, debate, and synthesize investment theses with document KB upload, sentiment extraction, quant portfolio construction heuristics, and RL-ready T signal"
+version = "3.6.0"
+description = "Multi-agent investment committee with structured reasoning, adversarial debate, eval harness, and RL-ready T signal"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Your Name"},
+    {name = "bdschi1"},
 ]
-keywords = ["ai", "agents", "multi-agent", "investment", "reasoning", "langgraph", "sentiment", "volatility", "reinforcement-learning"]
+keywords = ["ai", "agents", "multi-agent", "investment", "reasoning", "langgraph", "evals", "adversarial-testing", "reinforcement-learning"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -50,6 +50,9 @@ dev = [
 openai = [
     "openai>=1.50.0",
 ]
+deepseek = [
+    "openai>=1.50.0",
+]
 ollama = [
     "ollama>=0.4.0",
 ]
@@ -79,7 +82,7 @@ all = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["agents", "orchestrator", "tools", "config"]
+packages = ["agents", "orchestrator", "tools", "config", "evals"]
 
 [tool.ruff]
 target-version = "py311"

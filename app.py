@@ -9,8 +9,11 @@ Supported LLM providers:
     - Anthropic (Claude)
     - Google (Gemini)
     - OpenAI (GPT)
+    - DeepSeek
     - HuggingFace Inference API
     - Ollama (local open-source models)
+
+If no API keys are configured, defaults to Ollama (local).
 
 Architecture:
     User Input → Data Gathering → Parallel Analysis → Debate → Synthesis → Memo
@@ -98,10 +101,10 @@ def _create_openai_model(model_name: str | None = None) -> callable:
     """Create an OpenAI callable."""
     try:
         from openai import OpenAI
-    except ImportError:
+    except ImportError as exc:
         raise RuntimeError(
             "OpenAI package not installed. Run: pip install -e '.[openai]'"
-        )
+        ) from exc
 
     client = OpenAI(api_key=settings.openai_api_key or os.environ.get("OPENAI_API_KEY"))
     model = model_name or settings.openai_model
@@ -144,11 +147,11 @@ def _create_ollama_model(model_name: str | None = None) -> callable:
     """Create an Ollama (local) callable for open-source models."""
     try:
         import ollama as ollama_lib
-    except ImportError:
+    except ImportError as exc:
         raise RuntimeError(
             "Ollama package not installed. Run: pip install -e '.[ollama]'\n"
             "Also ensure Ollama is running: ollama serve"
-        )
+        ) from exc
 
     model = model_name or settings.ollama_model
     client = ollama_lib.Client(host=settings.ollama_base_url)
@@ -156,13 +159,13 @@ def _create_ollama_model(model_name: str | None = None) -> callable:
     # Verify the model is available before returning the callable
     try:
         client.show(model)
-    except Exception:
+    except Exception as exc:
         raise RuntimeError(
             f"Ollama model '{model}' not found. Pull it first:\n\n"
             f"    ollama pull {model}\n\n"
             f"Make sure Ollama is running (ollama serve) and the model name is correct.\n"
             f"Available models can be listed with: ollama list"
-        )
+        ) from exc
 
     def call(prompt: str) -> str:
         response = client.chat(
@@ -178,6 +181,34 @@ def _create_ollama_model(model_name: str | None = None) -> callable:
     return call
 
 
+def _create_deepseek_model(model_name: str | None = None) -> callable:
+    """Create a DeepSeek callable (OpenAI-compatible API)."""
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "OpenAI package required for DeepSeek (uses OpenAI-compatible API).\n"
+            "Run: pip install -e '.[deepseek]'"
+        ) from exc
+
+    client = OpenAI(
+        api_key=settings.deepseek_api_key or os.environ.get("DEEPSEEK_API_KEY"),
+        base_url="https://api.deepseek.com",
+    )
+    model = model_name or settings.deepseek_model
+
+    def call(prompt: str) -> str:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens_per_agent,
+        )
+        return response.choices[0].message.content
+
+    return call
+
+
 # ---------------------------------------------------------------------------
 # Unified model factory
 # ---------------------------------------------------------------------------
@@ -186,6 +217,7 @@ PROVIDER_FACTORIES = {
     LLMProvider.ANTHROPIC: _create_anthropic_model,
     LLMProvider.GOOGLE: _create_google_model,
     LLMProvider.OPENAI: _create_openai_model,
+    LLMProvider.DEEPSEEK: _create_deepseek_model,
     LLMProvider.HUGGINGFACE: _create_huggingface_model,
     LLMProvider.OLLAMA: _create_ollama_model,
 }
@@ -195,6 +227,7 @@ PROVIDER_DISPLAY = {
     "Claude (Anthropic)": LLMProvider.ANTHROPIC,
     "Gemini (Google)": LLMProvider.GOOGLE,
     "GPT (OpenAI)": LLMProvider.OPENAI,
+    "DeepSeek": LLMProvider.DEEPSEEK,
     "HuggingFace API": LLMProvider.HUGGINGFACE,
     "Ollama (Local)": LLMProvider.OLLAMA,
 }
@@ -217,16 +250,18 @@ PROVIDER_MODEL_CHOICES: dict[str, list[str]] = {
         "gpt-4o-mini",
         "gpt-4o",
     ],
+    "DeepSeek": [
+        "deepseek-chat",
+        "deepseek-reasoner",
+    ],
     "HuggingFace API": [
         "Qwen/Qwen2.5-72B-Instruct",
     ],
     "Ollama (Local)": [
+        "llama3.1:8b",
         "llama3.2:3b",
         "llama3:70b",
-        "codellama:7b",
-        "llama3.1:8b",
-        "mistral:7b",
-        "qwen2.5:7b",
+        "deepseek-r1-32b-abliterated",
     ],
 }
 
@@ -249,7 +284,7 @@ PROVIDER_RATE_LIMITS: dict[LLMProvider, dict[str, int]] = {
         "max_input_tpm": settings.rate_limit_input_tpm,
         "max_output_tpm": settings.rate_limit_output_tpm,
     },
-    # Google, OpenAI, HF, Ollama: no wrapping needed (generous limits or local)
+    # Google, OpenAI, DeepSeek, HF, Ollama: no wrapping needed (generous limits or local)
 }
 
 
@@ -345,7 +380,7 @@ def create_model(
         provider: Which LLM backend to use
         model_name: Specific model to use (overrides settings default)
     """
-    provider = provider or settings.llm_provider
+    provider = provider or settings.resolve_provider()
     factory = PROVIDER_FACTORIES.get(provider)
     if not factory:
         raise ValueError(f"Unknown provider: {provider}")
@@ -2052,9 +2087,14 @@ def _format_status(result: CommitteeResult, messages: list[str], provider_name: 
 def build_ui() -> gr.Blocks:
     """Build the Gradio interface with Full Auto and Review Before PM modes."""
 
-    default_display = PROVIDER_TO_DISPLAY.get(
-        settings.llm_provider, "Claude (Anthropic)"
-    )
+    resolved = settings.resolve_provider()
+    default_display = PROVIDER_TO_DISPLAY.get(resolved, "Ollama (Local)")
+
+    if resolved != settings.llm_provider:
+        logger.info(
+            "No API key for %s — auto-selected %s",
+            settings.llm_provider.value, resolved.value,
+        )
 
     with gr.Blocks(
         title="Multi-Agent Investment Committee",

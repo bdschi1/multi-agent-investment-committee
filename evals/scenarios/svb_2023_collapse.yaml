@@ -1,0 +1,95 @@
+# ===========================================================================
+# Silicon Valley Bank — Pre-Collapse Warning Signs
+# ===========================================================================
+
+id: "svb_2023_collapse"
+title: "Silicon Valley Bank — Pre-Collapse Warning Signs"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "SIVB"  # NOTE: delisted after March 2023 collapse; scenario relies on as_of_context
+as_of_date: "2023-03-01"
+as_of_context: >
+  SVB had ~$212B in assets, heavily concentrated in tech/VC depositors.
+  Rising rates caused massive unrealized losses on the held-to-maturity
+  bond portfolio (~$15B). Extreme depositor concentration risk with
+  tech startups and venture capital firms. The bank had been selling
+  available-for-sale securities at losses. Moody's downgrade rumors
+  were circulating. Deposit outflows were accelerating as tech sector
+  funding dried up. SVB's duration mismatch between short-term deposits
+  and long-dated bonds was a classic asset-liability management failure.
+
+tags:
+  - financials
+  - bank_run
+  - risk_management
+  - tail_risk
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: -1
+  expected_recommendation_bucket: "SELL"
+  conviction_range: [7.0, 10.0]
+  actual_outcome: >
+    SVB collapsed on March 10, 2023 in the fastest bank failure in US history.
+    A bank run was triggered after SVB announced a $1.8B loss on AFS securities
+    and a planned $2.25B capital raise on March 8. Within 48 hours, depositors
+    attempted to withdraw $42B. FDIC seized the bank on March 10. Stock went
+    to zero. Signature Bank and First Republic subsequently failed. The FDIC,
+    Fed, and Treasury declared a systemic risk exception to protect all depositors.
+  actual_return_pct: -100.0
+  must_find_facts:
+    - "unrealized losses on held-to-maturity bond portfolio approximately $15B"
+    - "depositor concentration in tech startups and venture capital"
+    - "selling available-for-sale securities at realized losses"
+    - "deposit outflows accelerating as tech funding dried up"
+    - "duration mismatch between short-term deposits and long-dated bonds"
+    - "total assets approximately $212 billion"
+  must_find_risks:
+    - "interest rate risk on bond portfolio"
+    - "depositor concentration and flight risk"
+    - "duration mismatch in asset-liability management"
+    - "potential bank run if confidence erodes"
+    - "unrealized losses would crystallize if forced to sell"
+    - "Moody's downgrade risk"
+  must_not_claim:
+    - "deposits are well diversified across industries"
+    - "held-to-maturity losses are immaterial"
+    - "SVB's capital position is strong"
+    - "deposit base is stable"
+  expert_reasoning_sketch: >
+    Classic SELL / AVOID thesis. SVB exhibited textbook asset-liability
+    management failure — funding long-duration bonds with flighty,
+    concentrated short-term deposits. The rising rate environment turned
+    the HTM portfolio into a time bomb. Once deposit outflows accelerated,
+    SVB would be forced to sell bonds at realized losses, destroying the
+    capital base. The depositor profile (tech/VC with balances well above
+    FDIC limits) made this the most run-prone bank in the system. Any
+    competent risk analysis should flag this as a high-conviction short or
+    avoid. The difficulty is that as of March 1, the market hadn't priced
+    it in yet — the stock was still trading around $280.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 30  # Risk identification is paramount for this scenario
+    direction_accuracy: 30
+    fact_coverage: 10
+  critical_failures:
+    - "Fails to mention interest rate risk on bond portfolio"
+    - "Fails to flag depositor concentration"
+    - "Recommends BUY or STRONG BUY"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-16"
+  notes: "Hard scenario testing tail risk identification. The system should surface the structural vulnerabilities that led to SVB's collapse on March 10, 2023. SIVB is delisted; the scenario relies entirely on as_of_context rather than live data. Risk identification weight elevated to 30 because this is fundamentally a risk management test."

@@ -25,6 +25,7 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     HUGGINGFACE = "huggingface"
     OLLAMA = "ollama"
+    DEEPSEEK = "deepseek"
 
 
 class Settings(BaseSettings):
@@ -70,13 +71,20 @@ class Settings(BaseSettings):
         description="HuggingFace model ID for inference",
     )
 
+    # --- DeepSeek ---
+    deepseek_api_key: Optional[str] = Field(default=None, description="DeepSeek API key")
+    deepseek_model: str = Field(
+        default="deepseek-chat",
+        description="DeepSeek model name",
+    )
+
     # --- Ollama (local open-source) ---
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama server URL",
     )
     ollama_model: str = Field(
-        default="llama3.2:3b",
+        default="llama3.1:8b",
         description="Ollama model name (must be pulled first)",
     )
 
@@ -121,8 +129,42 @@ class Settings(BaseSettings):
             LLMProvider.OPENAI: self.openai_model,
             LLMProvider.HUGGINGFACE: self.hf_model,
             LLMProvider.OLLAMA: self.ollama_model,
+            LLMProvider.DEEPSEEK: self.deepseek_model,
         }
         return model_map[self.llm_provider]
+
+    def resolve_provider(self) -> LLMProvider:
+        """Return the effective provider, falling back to Ollama if no API keys configured.
+
+        Logic:
+            1. If the selected provider has a valid API key → use it.
+            2. If the selected provider is Ollama → use it (no key needed).
+            3. If the selected provider has no key → scan for any provider with a key.
+            4. If no API keys at all → fall back to Ollama (local).
+        """
+        key_map = {
+            LLMProvider.ANTHROPIC: self.anthropic_api_key,
+            LLMProvider.GOOGLE: self.google_api_key,
+            LLMProvider.OPENAI: self.openai_api_key,
+            LLMProvider.HUGGINGFACE: self.hf_token,
+            LLMProvider.DEEPSEEK: self.deepseek_api_key,
+        }
+
+        # If the chosen provider has a valid key, use it
+        if self.llm_provider in key_map and key_map[self.llm_provider]:
+            return self.llm_provider
+
+        # Ollama doesn't need a key
+        if self.llm_provider == LLMProvider.OLLAMA:
+            return LLMProvider.OLLAMA
+
+        # No key for the selected provider — try to find any provider with a key
+        for provider, key in key_map.items():
+            if key:
+                return provider
+
+        # No API keys at all — fall back to Ollama
+        return LLMProvider.OLLAMA
 
 
 # Singleton instance

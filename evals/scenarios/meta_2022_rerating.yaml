@@ -1,0 +1,97 @@
+# ===========================================================================
+# META at $90 — Deep Value Rerating Opportunity
+# ===========================================================================
+
+id: "meta_2022_rerating"
+title: "META at $90 — Deep Value Rerating Opportunity"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "META"
+as_of_date: "2022-11-01"
+as_of_context: >
+  META fell from ~$380 to ~$90, a drawdown of over 75%. Massive Reality
+  Labs spending exceeding $10B per year with no clear path to ROI.
+  Revenue declining for the first time in company history. Zuckerberg's
+  "Year of Efficiency" pivot was imminent but not yet announced. Core
+  ad business under significant pressure from Apple's App Tracking
+  Transparency (ATT) changes. Market consensus was extremely bearish.
+  Headcount had ballooned. Reels monetization was ramping but lagging
+  TikTok. Family of Apps still generating substantial free cash flow
+  despite top-line pressure.
+
+tags:
+  - big_tech
+  - deep_value
+  - turnaround
+  - contrarian
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [6.0, 9.0]
+  actual_outcome: >
+    META rallied from ~$90 to ~$500+ over the following 18 months, a return
+    exceeding 450%. Zuckerberg announced the "Year of Efficiency" in Feb 2023,
+    cutting 21,000 employees across two rounds of layoffs. Operating margins
+    recovered from mid-20s to mid-30s. Reels monetization closed the gap with
+    feed. AI-driven ad targeting improvements (Advantage+) offset ATT headwinds.
+    Revenue reaccelerated to double-digit growth by mid-2023. The stock was the
+    top performer in the S&P 500 in 2023.
+  actual_return_pct: 450.0
+  must_find_facts:
+    - "Reality Labs spending exceeding $10B per year"
+    - "first revenue decline in company history"
+    - "Apple ATT impact on ad targeting and revenue"
+    - "Family of Apps still generating substantial free cash flow"
+    - "stock down over 75% from highs"
+    - "Reels monetization ramping but lagging TikTok"
+    - "headcount had ballooned significantly"
+  must_find_risks:
+    - "Reality Labs spending as ongoing earnings drag"
+    - "ad revenue trajectory uncertain under ATT"
+    - "TikTok competitive threat to user engagement"
+    - "Zuckerberg's control via dual-class share structure"
+    - "metaverse pivot may never generate ROI"
+  must_not_claim:
+    - "Year of Efficiency has already been announced"
+    - "Reality Labs is profitable"
+    - "Meta has already completed layoffs"
+    - "revenue is currently growing"
+  expert_reasoning_sketch: >
+    Contrarian BUY thesis at a generational valuation inflection. The market
+    was pricing META for permanent impairment, but the core ad business was
+    still generating >$30B in annual FCF. At $90, you were paying ~8x FCF for
+    the Family of Apps and getting Reality Labs as a free option. The ATT
+    headwinds were real but surmountable — Meta's AI and ML capabilities for
+    ad targeting were best-in-class. The key catalyst was operational
+    discipline: if Zuckerberg pivoted from spending to efficiency (which the
+    board pressure was making likely), margins would expand dramatically on
+    a recovering revenue base. The risk was that Zuckerberg's dual-class
+    control meant he could keep spending indefinitely on metaverse. But at
+    $90, you were being paid to take that risk. This was a classic fat-pitch
+    deep value setup that required conviction to go against extreme consensus
+    bearishness.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Fails to mention Reality Labs spending as drag"
+    - "Ignores ad revenue trajectory"
+    - "Misses that FCF remains substantial despite revenue decline"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-16"
+  notes: "Hard contrarian scenario. Tests whether the system can see through extreme consensus bearishness to identify a deep value rerating opportunity. META rallied ~450% from the Nov 2022 lows over the following 18 months. The difficulty is that all surface-level signals were bearish — the system needs to weigh FCF generation against headline negatives."

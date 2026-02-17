@@ -17,7 +17,6 @@ from agents.base import (
     BaseInvestmentAgent,
     BearCase,
     Rebuttal,
-    StepType,
     extract_json,
     clean_json_artifacts,
 )

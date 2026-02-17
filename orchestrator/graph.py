@@ -35,7 +35,7 @@ from langgraph.graph import StateGraph, END, START
 from langgraph.types import Send
 
 from orchestrator.state import CommitteeState
-from orchestrator.committee import CommitteeResult, ConvictionSnapshot
+from orchestrator.committee import CommitteeResult
 from orchestrator import nodes
 
 

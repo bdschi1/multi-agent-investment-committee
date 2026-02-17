@@ -12,7 +12,6 @@ Validates:
 from __future__ import annotations
 
 import json
-import pytest
 
 from orchestrator.graph import build_graph, run_graph
 from orchestrator.committee import InvestmentCommittee, CommitteeResult
@@ -156,7 +155,7 @@ class TestRunGraph:
         """on_status should fire with Phase 1 and Phase 3 messages."""
         mock = GraphMockLLM()
         statuses = []
-        result = run_graph(
+        run_graph(
             ticker="TEST",
             context={"market_data": {}, "news": [], "financial_metrics": {}},
             model=mock,
@@ -205,7 +204,7 @@ class TestRunGraph:
         """
         mock = GraphMockLLM()
         statuses = []
-        result = run_graph(
+        run_graph(
             ticker="TEST",
             context={"market_data": {}, "news": [], "financial_metrics": {}},
             model=mock,

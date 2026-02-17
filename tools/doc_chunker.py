@@ -15,7 +15,6 @@ Agents treat it as one resource among many — they rely on their own judgment.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from pathlib import Path

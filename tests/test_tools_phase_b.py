@@ -13,9 +13,8 @@ Validates:
 from __future__ import annotations
 
 import json
-import pytest
 
-from agents.base import parse_tool_calls, AgentRole
+from agents.base import parse_tool_calls
 from tools.registry import ToolRegistry, ToolSpec, build_default_registry
 
 
@@ -456,7 +455,6 @@ class TestAgentWithTools:
         from agents.sector_analyst import SectorAnalystAgent
 
         # Create a simple mock registry
-        mock_results = {"test_data": True}
         registry = ToolRegistry(max_calls_per_agent=5)
         registry.register(ToolSpec(
             name="get_earnings_history",

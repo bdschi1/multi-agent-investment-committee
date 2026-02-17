@@ -22,7 +22,6 @@ from agents.base import (
     BaseInvestmentAgent,
     MacroView,
     Rebuttal,
-    StepType,
     extract_json,
     clean_json_artifacts,
 )

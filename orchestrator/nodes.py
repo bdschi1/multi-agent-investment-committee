@@ -15,7 +15,6 @@ back to state for backward compatibility with Phase A/B tests.
 from __future__ import annotations
 
 import logging
-import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional

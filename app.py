@@ -41,7 +41,7 @@ from tools.data_aggregator import DataAggregator
 from orchestrator.committee import InvestmentCommittee, CommitteeResult
 from orchestrator.reasoning_trace import TraceRenderer
 from orchestrator.graph import run_graph_phase1, run_graph_phase2
-from orchestrator.memory import store_analysis, clear_session
+from orchestrator.memory import store_analysis
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)
@@ -785,7 +785,7 @@ def run_phase2_synthesis(
         return memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md, trace_md, status_md, str(export_path)
 
     except Exception as e:
-        logger.exception(f"Phase 2 failed")
+        logger.exception("Phase 2 failed")
         error_msg = f"## Error\n\n**Error:** {str(e)}"
         return error_msg, "", "", "", "", "", "", f"Error: {str(e)}", None
 

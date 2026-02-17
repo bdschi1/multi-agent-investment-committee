@@ -10,10 +10,8 @@ Tests cover:
 """
 
 import json
-import time
 from typing import Any
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Mock LLM — same pattern as test_graph.py / test_tools_phase_b.py
@@ -374,7 +372,7 @@ class TestTwoPhaseExecution:
         )
 
         # Run Phase 2 with PM guidance
-        result = run_graph_phase2(
+        run_graph_phase2(
             intermediate_state=intermediate,
             model=mock,
             pm_guidance="Weight the bear case more heavily",
@@ -468,7 +466,7 @@ class TestPMSessionMemory:
             tool_registry=None,
         )
 
-        result = run_graph_phase2(
+        run_graph_phase2(
             intermediate_state=intermediate,
             model=mock,
             tool_registry=None,

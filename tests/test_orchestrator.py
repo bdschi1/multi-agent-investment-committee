@@ -7,7 +7,6 @@ Tests the full multi-agent workflow with mock LLMs.
 from __future__ import annotations
 
 import json
-import pytest
 
 from orchestrator.committee import InvestmentCommittee, CommitteeResult
 from orchestrator.reasoning_trace import TraceRenderer
@@ -122,7 +121,7 @@ class TestInvestmentCommittee:
         committee = InvestmentCommittee(model=mock)
 
         statuses = []
-        result = committee.run(
+        committee.run(
             ticker="TEST",
             context={"market_data": {}, "news": [], "financial_metrics": {}},
             on_status=lambda msg: statuses.append(msg),

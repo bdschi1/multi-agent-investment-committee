@@ -18,12 +18,8 @@ from typing import Any
 from agents.base import (
     AgentRole,
     BaseInvestmentAgent,
-    BearCase,
-    BullCase,
     CommitteeMemo,
-    MacroView,
     Rebuttal,
-    StepType,
     extract_json,
     clean_json_artifacts,
 )

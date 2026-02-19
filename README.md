@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: 6.0.0
 app_file: app.py
 pinned: false
-license: apache-2.0
+license: mit
 tags:
   - multi-agent
   - agentic-ai
@@ -15,15 +15,16 @@ tags:
   - reasoning
   - langgraph
   - reinforcement-learning
+  - black-litterman
 ---
 
 # Multi-Agent Investment Committee
 
-Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal.
+Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — validated by a real Black-Litterman portfolio optimizer.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-200%20passing-brightgreen.svg)](tests/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-260%20passing-brightgreen.svg)](tests/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
 
@@ -31,7 +32,7 @@ Four AI agents analyze a ticker in parallel, debate each other's theses, and pro
 
 ## How It Works
 
-The pipeline runs in three phases:
+The pipeline runs in four phases:
 
 1. **Parallel Analysis** -- Three agents analyze the same ticker simultaneously:
    - **Sector Analyst** (bull case) -- sentiment extraction, return decomposition, catalyst identification
@@ -41,6 +42,8 @@ The pipeline runs in three phases:
 2. **Adversarial Debate** -- Bull and bear challenge each other through structured rebuttals. Convictions update based on evidence.
 
 3. **PM Synthesis** -- Portfolio Manager weighs all evidence, applies sizing heuristics, produces a committee memo with recommendation and T signal.
+
+4. **Portfolio Optimization** -- Black-Litterman optimizer takes the PM's conviction as a view, computes actual covariance/weights/risk metrics, and displays computed values alongside the LLM heuristics.
 
 ```
 User Input (ticker + guidance + docs)
@@ -62,10 +65,14 @@ Analyst Manager  Strategist
   (Synthesis + T Signal)
        |
        v
+  Black-Litterman Optimizer
+  (pypfopt: BL weights, Sharpe, MCTR)
+       |
+       v
   Committee Memo
 ```
 
-Each agent follows a THINK -> PLAN -> ACT -> REFLECT loop. Every step is captured in a reasoning trace visible in the UI.
+Each agent follows a THINK -> PLAN -> ACT -> REFLECT loop. Every step is captured in a reasoning trace visible in the UI. Each pipeline node runs at a task-appropriate temperature (data extraction: 0.1, analysis: 0.5, PM synthesis: 0.7, math: 0.0).
 
 ~20 LLM API calls per analysis. 90-120 seconds wall clock depending on provider.
 
@@ -80,6 +87,21 @@ Each agent follows a THINK -> PLAN -> ACT -> REFLECT loop. Every step is capture
 **Macro Strategist** -- Sets portfolio-level guardrails. Classifies vol regime (low/normal/elevated/crisis). Recommends net exposure direction, sizing method (proportional / risk parity / mean-variance / shrunk mean-variance), and portfolio vol target. The PM operates within these constraints.
 
 **Portfolio Manager** -- Chairs the committee. Weighs bull thesis, bear risks, macro context, and debate outcomes. Validates return decomposition after hearing both sides. Computes the T signal. Outputs a structured memo with recommendation, sizing rationale, conviction triggers, and factor exposures.
+
+---
+
+## Black-Litterman Optimizer
+
+After the PM produces its qualitative sizing heuristics, the `optimizer/` package runs a real [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) Black-Litterman model:
+
+1. **Universe construction** -- target stock + 5 sector peers + sector ETF + SPY (7-8 assets)
+2. **Covariance estimation** -- Ledoit-Wolf shrinkage on 2 years of daily returns
+3. **View extraction** -- PM's alpha estimate becomes the BL absolute view; bull/bear conviction spread scales view confidence (omega)
+4. **Posterior returns** -- BL model combines market-cap equilibrium prior with PM's view
+5. **Max-Sharpe optimization** -- efficient frontier produces optimal weights
+6. **Analytics** -- computed Sharpe/Sortino, OLS factor betas with t-stats, marginal contribution to risk (MCTR)
+
+The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
 
 ---
 
@@ -99,6 +121,24 @@ e = 0.01                   (floor)
 `T = +0.85` means strong long conviction with high certainty. `T = -0.40` means moderate short conviction with moderate certainty.
 
 Since the LLM interface is provider-agnostic (`callable(str) -> str`), token-level entropy is unavailable. The PM's self-reported confidence serves as proxy. Approach adapted from Darmanin & Vella, [arXiv:2508.02366](https://arxiv.org/abs/2508.02366).
+
+---
+
+## Per-Node Temperature Routing
+
+Each pipeline node runs at a task-appropriate temperature instead of a single global setting:
+
+| Node | Temperature | Reasoning |
+|------|------------|-----------|
+| `gather_data` | 0.1 | Factual retrieval — one "right" answer |
+| `run_sector_analyst` | 0.5 | Balanced exploration of thesis points |
+| `run_risk_manager` | 0.5 | Explore unlikely-but-possible tail risks |
+| `run_macro_analyst` | 0.5 | Balanced macro analysis |
+| `run_debate_round` | 0.5 | Adversarial — consider edge arguments |
+| `run_portfolio_manager` | 0.7 | Narrative flow, connecting themes |
+| `run_optimizer` | 0.0 | Deterministic computation (no LLM calls) |
+
+Works across all providers (Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama). Override per-node via `settings.task_temperatures`.
 
 ---
 
@@ -177,7 +217,7 @@ python app.py
 ### Test
 
 ```bash
-pytest tests/ -v   # 200 tests
+pytest tests/ -v   # 260 tests
 ```
 
 ---
@@ -212,7 +252,7 @@ Upload up to 5 research documents (PDF, DOCX, TXT). Files are token-aware chunke
 
 ```
 multi-agent-investment-committee/
-├── app.py                       # Gradio UI
+├── app.py                       # Gradio UI + report formatting
 ├── agents/
 │   ├── base.py                  # BaseAgent ABC + schemas + JSON extraction
 │   ├── sector_analyst.py        # Bull case + sentiment
@@ -224,8 +264,17 @@ multi-agent-investment-committee/
 │   ├── nodes.py                 # Node functions + T signal computation
 │   ├── state.py                 # CommitteeState TypedDict with reducers
 │   ├── committee.py             # CommitteeResult + ConvictionSnapshot
+│   ├── temperature.py           # Per-node temperature routing
 │   ├── memory.py                # Session memory store
 │   └── reasoning_trace.py       # Trace rendering
+├── optimizer/
+│   ├── bl_optimizer.py          # Main BL pipeline (universe → cov → views → BL → frontier)
+│   ├── node.py                  # LangGraph node wrapper with graceful fallback
+│   ├── models.py                # OptimizationResult, OptimizerFallback, FactorExposure, RiskContribution
+│   ├── views.py                 # Extract BL views (P, Q, omega) from PM output
+│   ├── universe.py              # Build asset universe (target + peers + sector ETF + SPY)
+│   ├── covariance.py            # Ledoit-Wolf covariance shrinkage via pypfopt
+│   └── analytics.py             # Sharpe/Sortino, factor betas (OLS), MCTR risk decomposition
 ├── tools/
 │   ├── registry.py              # ToolRegistry + budget enforcement
 │   ├── market_data.py           # yfinance wrapper
@@ -247,8 +296,10 @@ multi-agent-investment-committee/
 │   ├── scenarios/               # Ground-truth + adversarial YAML scenarios
 │   └── rubrics/                 # Scoring rubric definitions
 ├── config/
-│   └── settings.py              # Pydantic settings with .env
-├── tests/                       # 200 tests
+│   └── settings.py              # Pydantic settings with .env + per-node temperature overrides
+├── tests/                       # 260 tests
+├── .env.example                 # Environment variable template
+├── CHANGELOG.md                 # Version history
 └── pyproject.toml
 ```
 
@@ -259,8 +310,9 @@ multi-agent-investment-committee/
 - [LangGraph](https://github.com/langchain-ai/langgraph) -- StateGraph orchestration with fan-out/fan-in and conditional edges
 - [Gradio](https://www.gradio.app/) -- UI with 8 analysis tabs, T signal gauge, document upload
 - [Pydantic](https://docs.pydantic.dev/) -- Output validation for all agent schemas
+- [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) -- Black-Litterman model, efficient frontier, covariance shrinkage
 - [yfinance](https://github.com/ranaroussi/yfinance) -- Market data
-- [pytest](https://docs.pytest.org/) -- 200 tests with mock LLM fixtures
+- [pytest](https://docs.pytest.org/) -- 260 tests with mock LLM fixtures
 
 LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 
@@ -277,12 +329,13 @@ LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 - v3.4: Small-LLM resilience, model selection, Ollama improvements
 - v3.5: T signal with citation, conviction tracker redesign
 - v3.6: Eval harness, adversarial testing framework, Likert scoring, data provider abstraction
+- v3.7: Black-Litterman portfolio optimizer, per-node temperature routing
 
 ---
 
 ## License
 
-Apache 2.0
+MIT
 
 ---
 
@@ -291,6 +344,7 @@ Apache 2.0
 ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white)
 ![Gradio](https://img.shields.io/badge/Gradio-F97316?style=flat&logo=gradio&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=flat&logo=pydantic&logoColor=white)
+![pypfopt](https://img.shields.io/badge/pypfopt-Black--Litterman-2C5F2D?style=flat)
 ![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat&logo=anthropic&logoColor=white)
 ![Google](https://img.shields.io/badge/Gemini-4285F4?style=flat&logo=google&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white)

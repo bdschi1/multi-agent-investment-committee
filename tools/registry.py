@@ -236,4 +236,33 @@ def build_default_registry(max_calls: int = 5) -> ToolRegistry:
         parameters={"ticker": "Stock ticker symbol"},
     ))
 
+    # --- Knowledge Base tools (optional — graceful fallback if KB not available) ---
+    try:
+        from tools.knowledge_base import KnowledgeBaseTool
+
+        registry.register(ToolSpec(
+            name="search_kb",
+            description="Search curated knowledge base for relevant document chunks (quant, biotech, AI/ML, research)",
+            func=KnowledgeBaseTool.search_kb,
+            parameters={"query": "Natural language search query", "top_k": "Number of results (default 5)", "category": "Optional category filter"},
+        ))
+
+        registry.register(ToolSpec(
+            name="ask_kb",
+            description="Get formatted KB context string for LLM prompt injection",
+            func=KnowledgeBaseTool.ask_kb,
+            parameters={"query": "Natural language query", "top_k": "Number of chunks (default 5)", "category": "Optional category filter"},
+        ))
+
+        registry.register(ToolSpec(
+            name="answer_kb",
+            description="End-to-end KB answer with LLM synthesis and automatic fallback",
+            func=KnowledgeBaseTool.answer_kb,
+            parameters={"query": "Natural language question", "category": "Optional category filter"},
+        ))
+
+        logger.info("Knowledge base tools registered successfully")
+    except ImportError:
+        logger.info("Knowledge base not available — KB tools not registered")
+
     return registry

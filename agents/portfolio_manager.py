@@ -335,6 +335,7 @@ Produce the INVESTMENT COMMITTEE MEMO. Respond in valid JSON:
     "sizing_method_used": "proportional / risk_parity / mean_variance / shrunk_mean_variance — chosen because [rationale].",
     "target_nmv_rationale": "Target NMV is X% of AUM because: alpha estimate is Y%, vol is Z%, using [method] → NMV ∝ α/σ^n. Constrained by vol budget.",
     "vol_target_rationale": "Portfolio vol target is X%. This position contributes ~Y% marginal vol. Vol targeting > GMV targeting because vol is persistent.",
+    "pm_synthesis_rationale": "2-4 sentences: What tipped the balance in this decision? Why did you weight one side over the other? What would you tell the IC in the meeting — the real reason for this call, not just restating the thesis. Be candid about what gave you conviction or what held you back.",
     "position_direction": 1,
     "raw_confidence": 0.75
 }}

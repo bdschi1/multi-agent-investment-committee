@@ -85,6 +85,9 @@ class CommitteeState(TypedDict, total=False):
     # -- Phase 3: PM synthesis --
     committee_memo: Optional[CommitteeMemo]
 
+    # -- Phase 3b: Black-Litterman optimizer output --
+    optimization_result: Optional[Any]
+
     # -- Parsing quality (tracks which agents had JSON parsing failures) --
     parsing_failures: Annotated[list[str], operator.add]
 

@@ -37,6 +37,7 @@ from langgraph.types import Send
 from orchestrator.state import CommitteeState
 from orchestrator.committee import CommitteeResult
 from orchestrator import nodes
+from optimizer.node import run_optimizer
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ def build_graph() -> Any:
     graph.add_node("run_debate_round", nodes.run_debate_round)
     graph.add_node("report_debate_complete", nodes.report_debate_complete)
     graph.add_node("run_portfolio_manager", nodes.run_portfolio_manager)
+    graph.add_node("run_optimizer", run_optimizer)
     graph.add_node("finalize", nodes.finalize)
 
     # ── Entry ──
@@ -139,8 +141,9 @@ def build_graph() -> Any:
     # ── Post-debate → PM ──
     graph.add_edge("report_debate_complete", "run_portfolio_manager")
 
-    # ── PM → Finalize → END ──
-    graph.add_edge("run_portfolio_manager", "finalize")
+    # ── PM → Optimizer → Finalize → END ──
+    graph.add_edge("run_portfolio_manager", "run_optimizer")
+    graph.add_edge("run_optimizer", "finalize")
     graph.add_edge("finalize", END)
 
     return graph.compile()
@@ -226,10 +229,12 @@ def build_graph_phase2() -> Any:
     graph = StateGraph(CommitteeState)
 
     graph.add_node("run_portfolio_manager", nodes.run_portfolio_manager)
+    graph.add_node("run_optimizer", run_optimizer)
     graph.add_node("finalize", nodes.finalize)
 
     graph.add_edge(START, "run_portfolio_manager")
-    graph.add_edge("run_portfolio_manager", "finalize")
+    graph.add_edge("run_portfolio_manager", "run_optimizer")
+    graph.add_edge("run_optimizer", "finalize")
     graph.add_edge("finalize", END)
 
     return graph.compile()
@@ -249,6 +254,7 @@ def _state_to_result(state: dict) -> CommitteeResult:
         analyst_rebuttal=state.get("analyst_rebuttal"),
         risk_rebuttal=state.get("risk_rebuttal"),
         committee_memo=state.get("committee_memo"),
+        optimization_result=state.get("optimization_result"),
         traces=state.get("traces", {}),
         conviction_timeline=state.get("conviction_timeline", []),
         parsing_failures=state.get("parsing_failures", []),

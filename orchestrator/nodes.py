@@ -27,6 +27,7 @@ from agents.risk_manager import RiskManagerAgent
 from agents.macro_analyst import MacroAnalystAgent
 from agents.portfolio_manager import PortfolioManagerAgent
 from orchestrator.committee import ConvictionSnapshot
+from orchestrator.temperature import with_temperature, get_node_temperature
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,7 @@ def gather_data(state: dict, config: Optional[RunnableConfig] = None) -> dict:
 def run_sector_analyst(state: dict, config: Optional[RunnableConfig] = None) -> dict:
     """Run the Sector Analyst agent (bull case)."""
     model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_sector_analyst"))
     tool_registry = _get_tool_registry(state, config)
 
     agent = SectorAnalystAgent(model=model, tool_registry=tool_registry)
@@ -276,6 +278,7 @@ def run_sector_analyst(state: dict, config: Optional[RunnableConfig] = None) -> 
 def run_risk_manager(state: dict, config: Optional[RunnableConfig] = None) -> dict:
     """Run the Risk Manager agent (bear case)."""
     model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_risk_manager"))
     tool_registry = _get_tool_registry(state, config)
 
     agent = RiskManagerAgent(model=model, tool_registry=tool_registry)
@@ -304,6 +307,7 @@ def run_risk_manager(state: dict, config: Optional[RunnableConfig] = None) -> di
 def run_macro_analyst(state: dict, config: Optional[RunnableConfig] = None) -> dict:
     """Run the Macro Analyst agent (top-down context)."""
     model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_macro_analyst"))
     tool_registry = _get_tool_registry(state, config)
 
     agent = MacroAnalystAgent(model=model, tool_registry=tool_registry)
@@ -374,6 +378,7 @@ def run_debate_round(state: dict, config: Optional[RunnableConfig] = None) -> di
     in parallel via ThreadPoolExecutor, exactly as v1 does.
     """
     model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_debate_round"))
 
     current_round = state.get("debate_round", 0) + 1
     max_rounds = state.get("max_debate_rounds", 2)
@@ -542,6 +547,7 @@ def run_portfolio_manager(state: dict, config: Optional[RunnableConfig] = None) 
     - prior_analyses: session memory of prior runs for this ticker
     """
     model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_portfolio_manager"))
     tool_registry = _get_tool_registry(state, config)
 
     _status(

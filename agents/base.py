@@ -401,6 +401,14 @@ class CommitteeMemo(BaseModel):
             "Vol targeting > GMV targeting because vol is persistent and predictable."
         ),
     )
+    # PM synthesis reasoning — explains the "why" behind the final call
+    pm_synthesis_rationale: str = Field(
+        default="",
+        description=(
+            "2-4 sentence explanation of PM's reasoning process: what tipped the balance, "
+            "why one side was weighted over the other, and what the PM would say in the IC meeting."
+        ),
+    )
     # T signal: direction * entropy-adjusted confidence
     position_direction: int = Field(
         default=0,

@@ -7,6 +7,11 @@ from tools.insider_data import InsiderDataTool
 from tools.earnings_data import EarningsDataTool
 from tools.registry import ToolRegistry, ToolSpec, build_default_registry
 
+try:
+    from tools.knowledge_base import KnowledgeBaseTool
+except ImportError:
+    KnowledgeBaseTool = None
+
 __all__ = [
     "MarketDataTool",
     "NewsRetrievalTool",
@@ -15,6 +20,7 @@ __all__ = [
     "PeerComparisonTool",
     "InsiderDataTool",
     "EarningsDataTool",
+    "KnowledgeBaseTool",
     "ToolRegistry",
     "ToolSpec",
     "build_default_registry",

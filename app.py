@@ -37,6 +37,10 @@ from typing import Any
 import gradio as gr
 
 from config.settings import settings, LLMProvider
+from orchestrator.conviction_chart import (
+    build_conviction_probability,
+    build_conviction_trajectory,
+)
 from tools.data_aggregator import DataAggregator
 from orchestrator.committee import InvestmentCommittee, CommitteeResult
 from orchestrator.reasoning_trace import TraceRenderer
@@ -67,11 +71,11 @@ def _create_anthropic_model(model_name: str | None = None) -> callable:
     client = Anthropic(api_key=settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY"))
     model = model_name or settings.anthropic_model
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
         response = client.messages.create(
             model=model,
             max_tokens=settings.max_tokens_per_agent,
-            temperature=settings.temperature,
+            temperature=temperature if temperature is not None else settings.temperature,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text
@@ -86,12 +90,12 @@ def _create_google_model(model_name: str | None = None) -> callable:
     client = genai.Client(api_key=settings.google_api_key or os.environ.get("GOOGLE_API_KEY"))
     model = model_name or settings.google_model
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
         response = client.models.generate_content(
             model=model,
             contents=prompt,
             config={
-                "temperature": settings.temperature,
+                "temperature": temperature if temperature is not None else settings.temperature,
                 "max_output_tokens": settings.max_tokens_per_agent,
             },
         )
@@ -112,11 +116,11 @@ def _create_openai_model(model_name: str | None = None) -> callable:
     client = OpenAI(api_key=settings.openai_api_key or os.environ.get("OPENAI_API_KEY"))
     model = model_name or settings.openai_model
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.temperature,
+            temperature=temperature if temperature is not None else settings.temperature,
             max_tokens=settings.max_tokens_per_agent,
         )
         return response.choices[0].message.content
@@ -134,11 +138,12 @@ def _create_huggingface_model(model_name: str | None = None) -> callable:
         token=settings.hf_token or os.environ.get("HF_TOKEN"),
     )
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
+        temp = temperature if temperature is not None else settings.temperature
         response = client.text_generation(
             prompt,
             max_new_tokens=settings.max_tokens_per_agent,
-            temperature=max(settings.temperature, 0.01),  # HF needs >0
+            temperature=max(temp, 0.01),  # HF needs >0
             do_sample=True,
         )
         return response
@@ -170,12 +175,12 @@ def _create_ollama_model(model_name: str | None = None) -> callable:
             f"Available models can be listed with: ollama list"
         ) from exc
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
         response = client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             options={
-                "temperature": settings.temperature,
+                "temperature": temperature if temperature is not None else settings.temperature,
                 "num_predict": settings.max_tokens_per_agent,
             },
         )
@@ -200,11 +205,11 @@ def _create_deepseek_model(model_name: str | None = None) -> callable:
     )
     model = model_name or settings.deepseek_model
 
-    def call(prompt: str) -> str:
+    def call(prompt: str, *, temperature: float | None = None) -> str:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.temperature,
+            temperature=temperature if temperature is not None else settings.temperature,
             max_tokens=settings.max_tokens_per_agent,
         )
         return response.choices[0].message.content
@@ -352,11 +357,11 @@ class RateLimitedModel:
             )
             time.sleep(min(wait_secs, 5.0))  # cap individual sleep at 5s for responsiveness
 
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: str, **kwargs) -> str:
         input_tokens = self._estimate_tokens(prompt)
         self._wait_for_budget(input_tokens)
 
-        result = self._model(prompt)
+        result = self._model(prompt, **kwargs)
         output_tokens = self._estimate_tokens(result)
 
         with self._lock:
@@ -558,6 +563,12 @@ def run_committee_analysis(
         macro_md = _format_macro_view(result)
         debate_md = _format_debate(result)
         conviction_md = _format_conviction_evolution(result)
+        trajectory_fig = build_conviction_trajectory(
+            result.conviction_timeline, ticker, result.committee_memo,
+        )
+        probability_fig = build_conviction_probability(
+            result.conviction_timeline, ticker, result.committee_memo,
+        )
         trace_md = TraceRenderer.to_gradio_accordion(result.traces)
         status_md = _format_status(result, status_messages, provider_name)
 
@@ -572,7 +583,8 @@ def run_committee_analysis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md, trace_md, status_md, str(export_path)
+        return (memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+                trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
         logger.exception(f"Committee analysis failed for {ticker}")
@@ -582,7 +594,7 @@ def run_committee_analysis(
             f"**Error:** {str(e)}\n\n"
             f"Check that your API key is set in `.env` and the provider is available."
         )
-        return error_msg, "", "", "", "", "", "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
     finally:
         # Restore original debate rounds
         settings.max_debate_rounds = original_rounds
@@ -704,7 +716,7 @@ def run_phase2_synthesis(
     provider_name: str,
     model_choice: str = "",
     progress: gr.Progress = gr.Progress(),
-) -> tuple[str, str, str, str, str, str, str, str, str]:
+) -> tuple:
     """
     Run Phase 2 (PM synthesis) and return full formatted results.
 
@@ -713,7 +725,7 @@ def run_phase2_synthesis(
     if intermediate_state is None:
         return (
             "No Phase 1 results available. Run Phase 1 first.",
-            "", "", "", "", "", "", "", None
+            "", "", "", "", "", None, None, "", "", None
         )
 
     status_messages = []
@@ -770,6 +782,12 @@ def run_phase2_synthesis(
         macro_md = _format_macro_view(result)
         debate_md = _format_debate(result)
         conviction_md = _format_conviction_evolution(result)
+        trajectory_fig = build_conviction_trajectory(
+            result.conviction_timeline, ticker, result.committee_memo,
+        )
+        probability_fig = build_conviction_probability(
+            result.conviction_timeline, ticker, result.committee_memo,
+        )
         trace_md = TraceRenderer.to_gradio_accordion(result.traces)
         status_md = _format_status(result, status_messages, provider_name)
 
@@ -782,12 +800,13 @@ def run_phase2_synthesis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md, trace_md, status_md, str(export_path)
+        return (memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+                trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
         logger.exception("Phase 2 failed")
         error_msg = f"## Error\n\n**Error:** {str(e)}"
-        return error_msg, "", "", "", "", "", "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
 
 
 # ---------------------------------------------------------------------------
@@ -962,6 +981,141 @@ def _build_session_section() -> str:
     return "\n".join(lines)
 
 
+def _format_optimizer_section(optimization_result, memo=None) -> str:
+    """Format the Black-Litterman optimizer output as markdown tables."""
+    if not optimization_result or not getattr(optimization_result, 'success', False):
+        error_msg = getattr(optimization_result, 'error_message', '') if optimization_result else ''
+        if error_msg:
+            return (
+                "\n## Computed Portfolio Analytics (Black-Litterman)\n\n"
+                f"*Optimizer did not produce results: {error_msg}*\n"
+            )
+        return ""
+
+    opt = optimization_result
+    lines = [
+        "",
+        "## Computed Portfolio Analytics (Black-Litterman)",
+        "",
+        "*Actual computed values from pypfopt Black-Litterman model — "
+        "compare with LLM heuristics above.*",
+        "",
+    ]
+
+    # Side-by-side comparison table (heuristic vs computed)
+    if memo:
+        idio_ret_h = getattr(memo, 'idio_return_estimate', '') or '—'
+        sharpe_h = getattr(memo, 'sharpe_estimate', '') or '—'
+        sortino_h = getattr(memo, 'sortino_estimate', '') or '—'
+
+        # Extract numeric portion from heuristic strings for delta
+        def _extract_pct(s):
+            import re
+            m = re.search(r'([+-]?\d+(?:\.\d+)?)\s*%', str(s))
+            if m:
+                return float(m.group(1))
+            m = re.search(r'([+-]?\d+\.\d+)', str(s))
+            if m:
+                v = float(m.group(1))
+                return v * 100 if abs(v) < 5 else v
+            return None
+
+        def _extract_ratio(s):
+            import re
+            m = re.search(r'([+-]?\d+\.\d+)', str(s))
+            return float(m.group(1)) if m else None
+
+        idio_num = _extract_pct(idio_ret_h)
+        sharpe_num = _extract_ratio(sharpe_h)
+        sortino_num = _extract_ratio(sortino_h)
+
+        bl_ret_pct = opt.bl_expected_return * 100
+
+        def _delta(heuristic, computed):
+            if heuristic is not None and computed is not None:
+                d = computed - heuristic
+                return f"{d:+.1f}{'%' if abs(heuristic) > 1 else ''}"
+            return "—"
+
+        lines.extend([
+            "### Heuristic vs Computed Comparison",
+            "",
+            "| Metric | LLM Heuristic | BL Computed | Delta |",
+            "|--------|---------------|-------------|-------|",
+            f"| **Expected Alpha** | {idio_ret_h.split('—')[0].strip() if '—' in str(idio_ret_h) else idio_ret_h} | "
+            f"{bl_ret_pct:.1f}% (BL posterior) | {_delta(idio_num, bl_ret_pct)} |",
+            f"| **Sharpe** | {sharpe_h.split('—')[0].strip() if '—' in str(sharpe_h) else sharpe_h} | "
+            f"{opt.computed_sharpe:.2f} (computed) | {_delta(sharpe_num, opt.computed_sharpe)} |",
+            f"| **Sortino** | {sortino_h.split('—')[0].strip() if '—' in str(sortino_h) else sortino_h} | "
+            f"{opt.computed_sortino:.2f} (computed) | {_delta(sortino_num, opt.computed_sortino)} |",
+            f"| **Vol** | — | {opt.annualized_vol * 100:.1f}% (realized) | — |",
+            f"| **Downside Vol** | — | {opt.downside_vol * 100:.1f}% (realized) | — |",
+            "",
+        ])
+
+    # BL model output
+    lines.extend([
+        "### Black-Litterman Model Output",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| **Optimal Weight ({opt.ticker})** | {opt.optimal_weight_pct} |",
+        f"| **BL Expected Return** | {opt.bl_expected_return * 100:.2f}% |",
+        f"| **Equilibrium Return (Prior)** | {opt.equilibrium_return * 100:.2f}% |",
+        f"| **Portfolio Vol** | {opt.portfolio_vol * 100:.2f}% |",
+        f"| **Covariance Method** | {opt.covariance_method} |",
+        f"| **Lookback** | {opt.lookback_days} trading days |",
+        f"| **Risk Aversion (delta)** | {opt.risk_aversion} |",
+        f"| **Tau** | {opt.tau} |",
+        "",
+    ])
+
+    # Factor exposures
+    if opt.factor_exposures:
+        lines.extend([
+            "### Computed Factor Exposures (OLS Regression)",
+            "",
+            "| Factor | Beta | t-stat | p-value | Significant |",
+            "|--------|------|--------|---------|-------------|",
+        ])
+        for fe in opt.factor_exposures:
+            sig = "Yes" if fe.p_value < 0.05 else "No"
+            lines.append(
+                f"| **{fe.factor_name}** | {fe.beta:.4f} | {fe.t_stat:.2f} | "
+                f"{fe.p_value:.4f} | {sig} |"
+            )
+        lines.append("")
+
+    # Risk contribution (MCTR) — top 5
+    if opt.risk_contributions:
+        lines.extend([
+            "### Risk Contribution (MCTR) — Top 5",
+            "",
+            "| Ticker | Weight | Marginal CTR | % of Portfolio Risk |",
+            "|--------|--------|-------------|---------------------|",
+        ])
+        for rc in opt.risk_contributions[:5]:
+            lines.append(
+                f"| **{rc.ticker}** | {rc.weight:.1%} | {rc.marginal_ctr:.4f} | "
+                f"{rc.pct_contribution:.1%} |"
+            )
+        lines.append("")
+
+    # Universe weights (non-zero)
+    if opt.universe_weights:
+        lines.extend([
+            "### BL Optimal Universe Weights",
+            "",
+            "| Ticker | Weight |",
+            "|--------|--------|",
+        ])
+        for t, w in sorted(opt.universe_weights.items(), key=lambda x: -x[1]):
+            lines.append(f"| {t} | {w:.1%} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _build_full_report(
     result: CommitteeResult,
     memo_md: str,
@@ -1074,6 +1228,51 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
             "",
         ])
 
+    # --- Executive Summary ---
+    # Build a structured summary paragraph from the memo fields
+    rec_word = rec.lower()
+    conviction_adj = (
+        "high" if memo.conviction >= 7.5 else
+        "moderate" if memo.conviction >= 5.0 else
+        "low"
+    )
+    top_factor = memo.key_factors[0] if memo.key_factors else "multiple considerations"
+    top_risk = memo.risk_mitigants[0] if memo.risk_mitigants else "standard risk controls"
+    event_path_early = getattr(memo, 'event_path', [])
+    event_highlight = ""
+    if event_path_early:
+        event_highlight = f" The nearest catalyst is {event_path_early[0].split(':')[0].strip('.')}."
+
+    lines.extend([
+        "---",
+        "",
+        "## Executive Summary",
+        "",
+        f"The committee recommends **{rec}** on {memo.ticker} with **{conviction_adj} conviction "
+        f"({memo.conviction}/10)** and a **{memo.position_size.lower()}** sizing. "
+        f"The thesis is built on {top_factor.lower() if top_factor[0].isupper() else top_factor}. "
+        f"Primary risk management requires {top_risk.lower() if top_risk[0].isupper() else top_risk}."
+        f"{event_highlight} "
+        f"T signal: **{t_signal:+.4f}** ({t_label}).",
+        "",
+    ])
+
+    # --- PM Synthesis Rationale ---
+    pm_rationale = getattr(memo, 'pm_synthesis_rationale', '')
+    if pm_rationale:
+        lines.extend([
+            "## PM Synthesis",
+            "",
+            f"*{pm_rationale}*",
+            "",
+        ])
+
+    kf_highlight = ""
+    if memo.key_factors:
+        kf_text = memo.key_factors[0][:80]
+        kf_ellipsis = "..." if len(memo.key_factors[0]) > 80 else ""
+        kf_highlight = f"***{len(memo.key_factors)} factors drove the final call — #1: {kf_text}{kf_ellipsis}***"
+
     lines.extend([
         "---",
         "",
@@ -1082,6 +1281,7 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
         memo.thesis_summary,
         "",
         "## Key Decision Factors",
+        kf_highlight,
         "",
         "| # | Factor |",
         "|---|--------|",
@@ -1097,6 +1297,7 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
     lines.extend([
         "",
         "## Evidence Weighed",
+        f"***{len(bull_pts)} bull vs {len(bear_pts)} bear arguments evaluated***",
         "",
         "| Bull Points Accepted | Bear Points Accepted |",
         "|---------------------|---------------------|",
@@ -1107,20 +1308,38 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
         lines.append(f"| {bull} | {bear} |")
 
     if memo.dissenting_points:
-        lines.extend(["", "## Where PM Overruled"])
+        lines.extend([
+            "",
+            "## Where PM Overruled",
+            f"***{len(memo.dissenting_points)} point{'s' if len(memo.dissenting_points) != 1 else ''} "
+            f"where PM exercised independent judgment***",
+        ])
         for point in memo.dissenting_points:
             lines.append(f"> {point}")
 
-    lines.extend(["", "## Risk Mitigants Required"])
+    if memo.risk_mitigants:
+        risk_text = memo.risk_mitigants[0][:80]
+        risk_ellipsis = "..." if len(memo.risk_mitigants[0]) > 80 else ""
+        risk_highlight = f"***Primary: {risk_text}{risk_ellipsis}***"
+    else:
+        risk_highlight = ""
+    lines.extend([
+        "",
+        "## Risk Mitigants Required",
+        risk_highlight,
+    ])
     for i, mit in enumerate(memo.risk_mitigants, 1):
         lines.append(f"{i}. {mit}")
 
     # Head-Trader: Implied Vol Assessment
     iv_assessment = getattr(memo, 'implied_vol_assessment', '')
     if iv_assessment:
+        # Extract IV vs HV highlight
+        iv_snippet = iv_assessment[:100].split(".")[0] if iv_assessment else ""
         lines.extend([
             "",
             "## Volatility Assessment (Trading Desk)",
+            f"***{iv_snippet}***" if iv_snippet else "",
             "",
             iv_assessment,
         ])
@@ -1128,9 +1347,12 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
     # Head-Trader: Event Path
     event_path = getattr(memo, 'event_path', [])
     if event_path:
+        # Extract the first event as the key focus
+        first_event = event_path[0].split(":")[0].strip() if event_path else ""
         lines.extend([
             "",
             "## Event Path",
+            f"***Focus: {first_event} — {len(event_path)} events mapped***" if first_event else "",
             "",
             "| # | Event & Expected Impact |",
             "|---|------------------------|",
@@ -1141,9 +1363,12 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
     # Head-Trader: Conviction Change Triggers
     triggers = getattr(memo, 'conviction_change_triggers', {})
     if triggers:
+        cut_trigger = triggers.get('cut_position', '')
+        cut_snippet = cut_trigger[:80] if cut_trigger else "see below"
         lines.extend([
             "",
             "## Conviction Change Triggers",
+            f"***Stop-loss: {cut_snippet}***",
             "",
             "| Action | Trigger |",
             "|--------|---------|",
@@ -1155,9 +1380,16 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
     # Head-Trader: Factor Exposures
     factors = getattr(memo, 'factor_exposures', {})
     if factors:
+        # Find the dominant factor tilt
+        dominant = next(
+            (f"{k}: {v.split('—')[0].strip()}" for k, v in factors.items()
+             if any(w in v.lower() for w in ("high", "negative", "positive", "strong"))),
+            "mixed factor profile"
+        )
         lines.extend([
             "",
             "## Factor Exposures",
+            f"***Dominant tilt — {dominant}***",
             "",
             "| Factor | Exposure |",
             "|--------|----------|",
@@ -1174,9 +1406,11 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
     vol_target_r = getattr(memo, 'vol_target_rationale', '')
 
     if any([idio_ret, sharpe_est, sortino_est, sizing_method, nmv_rationale]):
+        alpha_snippet = idio_ret.split("—")[0].strip() if idio_ret else "see below"
         lines.extend([
             "",
             "## Quantitative Sizing Heuristics",
+            f"***Alpha estimate: {alpha_snippet} | Method: {sizing_method.split('—')[0].strip() if sizing_method else 'TBD'}***",
             "",
             "*LLM-reasoned estimates — heuristic framework, not optimizer output.*",
             "",
@@ -1196,6 +1430,13 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
             lines.extend(["", f"**NMV Rationale:** {nmv_rationale}"])
         if vol_target_r:
             lines.extend(["", f"**Vol Target Rationale:** {vol_target_r}"])
+
+    # Black-Litterman optimizer output (computed, not heuristic)
+    opt_result = getattr(result, 'optimization_result', None)
+    if opt_result:
+        opt_section = _format_optimizer_section(opt_result, memo)
+        if opt_section:
+            lines.append(opt_section)
 
     # T Signal Detail
     lines.extend([
@@ -2173,13 +2414,14 @@ def build_ui() -> gr.Blocks:
                         "Directs all 4 agents during analysis. e.g. 'focus on tariff exposure, "
                         "compare valuation vs. sector median, consider pharma rotation'"
                     ),
-                    max_lines=2,
+                    lines=4,
+                    max_lines=6,
                     scale=3,
                 )
                 file_upload = gr.File(
-                    label="Research Docs (max 5)",
+                    label="Research Docs (max 10)",
                     file_count="multiple",
-                    file_types=[".pdf", ".docx", ".doc", ".txt"],
+                    file_types=[".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".csv"],
                     scale=2,
                 )
 
@@ -2219,6 +2461,13 @@ def build_ui() -> gr.Blocks:
         report_path_state = gr.State(value=None)
         intermediate_state = gr.State(value=None)
 
+        # ── Progress indicator (single timer) ──
+        progress_status = gr.HTML(
+            value="",
+            elem_classes=["progress-bar"],
+            show_label=False,
+        )
+
         # ── Result tabs ──
         with gr.Tabs(elem_classes=["result-tabs"]):
             with gr.TabItem("Committee Memo"):
@@ -2237,7 +2486,9 @@ def build_ui() -> gr.Blocks:
                 debate_output = gr.Markdown(label="Adversarial Debate Transcript")
 
             with gr.TabItem("Conviction Tracker"):
-                conviction_output = gr.Markdown(label="Conviction Evolution")
+                conviction_trajectory_plot = gr.Plot(label="Conviction Trajectory (0-10)")
+                conviction_probability_plot = gr.Plot(label="Conviction Probability (0-1)")
+                conviction_output = gr.Markdown(label="Conviction Detail")
 
             with gr.TabItem("Reasoning Trace"):
                 trace_output = gr.Markdown(label="Agent Reasoning Traces")
@@ -2288,13 +2539,26 @@ def build_ui() -> gr.Blocks:
         # ── Lock inputs during execution ──
         _lockable = [ticker_input, context_input, provider_dropdown,
                      model_dropdown, debate_rounds_input, mode_selector,
-                     file_upload, pm_guidance_input]
+                     file_upload, pm_guidance_input,
+                     run_btn, phase1_btn, phase2_btn]
 
         def _lock_inputs():
-            return [gr.update(interactive=False) for _ in _lockable]
+            updates = [gr.update(interactive=False) for _ in range(8)]  # input fields
+            updates.extend([
+                gr.update(interactive=False, value="..."),  # run_btn
+                gr.update(interactive=False, value="..."),  # phase1_btn
+                gr.update(interactive=False, value="..."),  # phase2_btn
+            ])
+            return updates
 
         def _unlock_inputs():
-            return [gr.update(interactive=True) for _ in _lockable]
+            updates = [gr.update(interactive=True) for _ in range(8)]  # input fields
+            updates.extend([
+                gr.update(interactive=True, value="Run"),   # run_btn
+                gr.update(interactive=True, value="Run"),   # phase1_btn
+                gr.update(interactive=True, value="Go"),    # phase2_btn
+            ])
+            return updates
 
         # ── Full Auto mode ──
         run_btn.click(
@@ -2302,12 +2566,21 @@ def build_ui() -> gr.Blocks:
             inputs=[],
             outputs=_lockable,
         ).then(
+            fn=lambda: '<div style="background:#1a5c2a;color:#4ade80;padding:12px 20px;border-radius:8px;font-size:1.1rem;font-weight:600;text-align:center;animation:pulse 2s infinite">&#9881; Running committee analysis &mdash; agents thinking, debating, synthesizing...</div><style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}</style>',
+            inputs=[],
+            outputs=[progress_status],
+        ).then(
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input,
                     model_dropdown, file_upload],
             outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
-                     conviction_output, trace_output, status_output, report_path_state],
-            show_progress="full",
+                     conviction_output, conviction_trajectory_plot, conviction_probability_plot,
+                     trace_output, status_output, report_path_state],
+            show_progress="hidden",
+        ).then(
+            fn=lambda: "",
+            inputs=[],
+            outputs=[progress_status],
         ).then(
             fn=_unlock_inputs,
             inputs=[],
@@ -2336,12 +2609,20 @@ def build_ui() -> gr.Blocks:
             inputs=[],
             outputs=_lockable,
         ).then(
+            fn=lambda: '<div style="background:#1a5c2a;color:#4ade80;padding:12px 20px;border-radius:8px;font-size:1.1rem;font-weight:600;text-align:center;animation:pulse 2s infinite">&#9881; Running Phase 1 &mdash; analysts building bull, bear, and macro cases...</div><style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}</style>',
+            inputs=[],
+            outputs=[progress_status],
+        ).then(
             fn=handle_phase1,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input,
                     model_dropdown, file_upload],
             outputs=[intermediate_state, bull_preview, bear_preview,
                      macro_preview, debate_preview, review_status, review_accordion],
-            show_progress="full",
+            show_progress="hidden",
+        ).then(
+            fn=lambda: "",
+            inputs=[],
+            outputs=[progress_status],
         ).then(
             fn=_unlock_inputs,
             inputs=[],
@@ -2362,12 +2643,21 @@ def build_ui() -> gr.Blocks:
             inputs=[],
             outputs=_lockable,
         ).then(
+            fn=lambda: '<div style="background:#1a5c2a;color:#4ade80;padding:12px 20px;border-radius:8px;font-size:1.1rem;font-weight:600;text-align:center;animation:pulse 2s infinite">&#9881; Running PM synthesis &mdash; portfolio manager making final decision...</div><style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}</style>',
+            inputs=[],
+            outputs=[progress_status],
+        ).then(
             fn=handle_phase2,
             inputs=[intermediate_state, pm_guidance_input, provider_dropdown, model_dropdown],
             outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
-                     conviction_output, trace_output, status_output, report_path_state,
+                     conviction_output, conviction_trajectory_plot, conviction_probability_plot,
+                     trace_output, status_output, report_path_state,
                      review_accordion],
-            show_progress="full",
+            show_progress="hidden",
+        ).then(
+            fn=lambda: "",
+            inputs=[],
+            outputs=[progress_status],
         ).then(
             fn=_unlock_inputs,
             inputs=[],
@@ -2443,19 +2733,61 @@ if __name__ == "__main__":
         .export-row { margin-top: 4px; }
         .disclaimer { font-size: 0.78em; color: #888; margin-top: 80px; padding: 10px 14px;
                        border: 1px solid #ddd; border-radius: 5px; line-height: 1.5; }
-        .start-btn button {
-            border-radius: 50% !important;
-            width: 4.5rem !important;
-            height: 4.5rem !important;
-            min-height: unset !important;
-            padding: 0 !important;
-            font-weight: 600 !important;
-            font-size: 0.7rem !important;
-            line-height: 1.2 !important;
-            text-align: center !important;
-        }
         .progress-bar { min-height: 0 !important; }
         .progress-bar .wrap, .progress-bar.wrap { min-height: 0 !important; max-height: 3rem !important; }
         .progress-text { font-size: 0.85rem !important; padding: 4px 8px !important; }
+        """,
+        js="""
+        () => {
+            function applyStyles() {
+                // Shrink all controls-group text
+                const cg = document.querySelectorAll('.controls-group');
+                cg.forEach(group => {
+                    group.querySelectorAll('input, button, select, textarea, span, label, li, div, option, a').forEach(el => {
+                        // Skip start-btn children — they get separate styling
+                        if (el.closest('.start-btn')) return;
+                        el.style.setProperty('font-size', '0.72rem', 'important');
+                    });
+                    group.querySelectorAll('input, select, textarea').forEach(el => {
+                        if (el.closest('.start-btn')) return;
+                        el.style.setProperty('padding', '4px 6px', 'important');
+                        el.style.setProperty('overflow', 'hidden', 'important');
+                        el.style.setProperty('text-overflow', 'ellipsis', 'important');
+                        el.style.setProperty('white-space', 'nowrap', 'important');
+                    });
+                });
+
+                // Green circle run buttons
+                document.querySelectorAll('.start-btn button').forEach(btn => {
+                    btn.style.setProperty('border-radius', '50%', 'important');
+                    btn.style.setProperty('width', '2.8rem', 'important');
+                    btn.style.setProperty('height', '2.8rem', 'important');
+                    btn.style.setProperty('min-width', '2.8rem', 'important');
+                    btn.style.setProperty('max-width', '2.8rem', 'important');
+                    btn.style.setProperty('min-height', '2.8rem', 'important');
+                    btn.style.setProperty('max-height', '2.8rem', 'important');
+                    btn.style.setProperty('padding', '0', 'important');
+                    btn.style.setProperty('font-size', '0.6rem', 'important');
+                    btn.style.setProperty('font-weight', '700', 'important');
+                    btn.style.setProperty('line-height', '1', 'important');
+                    btn.style.setProperty('text-align', 'center', 'important');
+                    btn.style.setProperty('background', '#2ecc71', 'important');
+                    btn.style.setProperty('background-color', '#2ecc71', 'important');
+                    btn.style.setProperty('border', '2px solid #27ae60', 'important');
+                    btn.style.setProperty('color', '#fff', 'important');
+                    btn.style.setProperty('box-shadow', '0 2px 8px rgba(46,204,113,0.3)', 'important');
+                });
+            }
+
+            // Run on load and re-run after Gradio finishes rendering
+            applyStyles();
+            setTimeout(applyStyles, 500);
+            setTimeout(applyStyles, 1500);
+            setTimeout(applyStyles, 3000);
+
+            // Observe DOM changes to re-apply (dropdown opens, etc.)
+            const observer = new MutationObserver(() => applyStyles());
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
         """,
     )

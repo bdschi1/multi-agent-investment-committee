@@ -95,7 +95,15 @@ class Settings(BaseSettings):
         default=5, ge=0, le=20,
         description="Max dynamic tool calls per agent per run (0 disables tool calling)",
     )
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature (global default)")
+    task_temperatures: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-node temperature overrides. Keys are node names "
+            "(e.g. 'run_sector_analyst', 'run_portfolio_manager'). "
+            "Unset nodes use built-in defaults from orchestrator/temperature.py."
+        ),
+    )
 
     # --- Rate Limiting (Anthropic Tier 1 — 85% of actual limits for safety margin) ---
     rate_limit_rpm: int = Field(

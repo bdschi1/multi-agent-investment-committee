@@ -54,6 +54,7 @@ class CommitteeResult:
     analyst_rebuttal: Optional[Rebuttal] = None
     risk_rebuttal: Optional[Rebuttal] = None
     committee_memo: Optional[CommitteeMemo] = None
+    optimization_result: Optional[Any] = None
     traces: dict[str, ReasoningTrace] = field(default_factory=dict)
     conviction_timeline: list[ConvictionSnapshot] = field(default_factory=list)
     parsing_failures: list[str] = field(default_factory=list)
@@ -70,6 +71,11 @@ class CommitteeResult:
             "analyst_rebuttal": self.analyst_rebuttal.model_dump() if self.analyst_rebuttal else None,
             "risk_rebuttal": self.risk_rebuttal.model_dump() if self.risk_rebuttal else None,
             "committee_memo": self.committee_memo.model_dump() if self.committee_memo else None,
+            "optimization_result": (
+                self.optimization_result.model_dump()
+                if self.optimization_result and hasattr(self.optimization_result, 'model_dump')
+                else None
+            ),
             "conviction_timeline": [
                 {
                     "phase": s.phase, "agent": s.agent, "score": s.score,

@@ -1,16 +1,16 @@
 """
 Document chunker for user-uploaded knowledge base files.
 
-Adapted from the local chunker project (bds_repos). Provides:
-- File ingestion: PDF, DOCX, TXT
-- Chunking decision: small files injected whole, large files chunked
+Provides:
+- File ingestion: PDF, DOCX, TXT, Excel (XLSX/XLS/CSV)
+- Section-aware chunking: detects headers/sections before splitting
+- Chunk overlap: configurable token overlap between consecutive chunks
 - Token-aware chunking: respects LLM context limits with tiktoken
 - Boilerplate removal: strips disclosure sections from equity research
 - Smart page scoring: importance-ranked page selection for large PDFs
 - Prompt injection defense: 8-pattern sanitization on all extracted text
 
-The processed KB is injected into agent context as supplementary research.
-Agents treat it as one resource among many — they rely on their own judgment.
+Section-aware chunking ported from knowledge-base/chunking/chunker.py.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ try:
     _enc = tiktoken.get_encoding("cl100k_base")
 
     def _count_tokens(text: str) -> int:
-        return len(_enc.encode(text))
+        return len(_enc.encode(text, disallowed_special=()))
 except ImportError:
     logger.warning("tiktoken not installed — falling back to word-based token estimate")
 
@@ -156,7 +156,105 @@ def _smart_select_pages(
 
 
 # ---------------------------------------------------------------------------
-# File readers — PDF, DOCX, TXT
+# Section / header detection (ported from knowledge-base chunker)
+# ---------------------------------------------------------------------------
+
+# Numbered section headers: "1. Introduction", "3.2 Methodology", "II. Results"
+_NUMBERED_HEADER_RE = re.compile(
+    r"^(?:"
+    r"(?:\d{1,3}\.)+\s+"                    # "1. ", "3.2. ", "1.2.3 "
+    r"|[IVXLC]+\.\s+"                       # "I. ", "IV. "
+    r"|[A-Z]\.\s+"                           # "A. ", "B. "
+    r"|(?:Chapter|Section|Part|Appendix)\s+\d+"  # "Chapter 1", "Section 3"
+    r")"
+    r"[A-Z].*$",                             # Must start with uppercase
+    re.MULTILINE,
+)
+
+# ALL-CAPS headers or Title Case headers (standalone short lines)
+_STANDALONE_HEADER_RE = re.compile(
+    r"^(?:"
+    r"[A-Z][A-Z\s&,/()-]{4,80}$"            # ALL CAPS line (5-80 chars)
+    r"|(?:[A-Z][a-z]+(?:\s+(?:[A-Z][a-z]+|and|or|of|the|in|for|to|&|vs\.?)){1,8})$"  # Title Case
+    r")",
+    re.MULTILINE,
+)
+
+# Markdown-style headers
+_MARKDOWN_HEADER_RE = re.compile(r"^#{1,4}\s+.+$", re.MULTILINE)
+
+# Common section keywords that signal topic boundaries
+_SECTION_KEYWORDS = re.compile(
+    r"^(?:"
+    r"Abstract|Introduction|Background|Overview|"
+    r"Methodology|Methods?|Data(?:\s+and\s+Methods?)?|"
+    r"Results?|Findings|Discussion|Analysis|"
+    r"Conclusion|Summary|Recommendations?|"
+    r"Risk Factors?|Valuation|Catalysts?|"
+    r"Key Takeaways?|Executive Summary|"
+    r"Appendix|References?|Bibliography|"
+    r"Exhibit|Figure|Table"
+    r")\s*[:.]?\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _detect_sections(text: str) -> list[dict]:
+    """Split text into sections based on structural header detection.
+
+    Returns a list of dicts: [{"header": str|None, "body": str}, ...]
+    Each section is a coherent topical unit bounded by detected headers.
+
+    Ported from knowledge-base/chunking/chunker.py::_detect_sections().
+    """
+    # Collect all header positions
+    header_spans = []
+    for pattern in [_NUMBERED_HEADER_RE, _MARKDOWN_HEADER_RE, _SECTION_KEYWORDS]:
+        for m in pattern.finditer(text):
+            header_spans.append((m.start(), m.end(), m.group().strip()))
+
+    # Also check standalone headers, but filter out false positives
+    for m in _STANDALONE_HEADER_RE.finditer(text):
+        candidate = m.group().strip()
+        if len(candidate) < 5:
+            continue
+        if re.match(r"^[A-Z]{1,5}$", candidate):
+            continue
+        header_spans.append((m.start(), m.end(), candidate))
+
+    if not header_spans:
+        return [{"header": None, "body": text}]
+
+    # Sort by position and deduplicate overlapping spans
+    header_spans.sort(key=lambda x: x[0])
+    deduped = []
+    for start, end, header_text in header_spans:
+        if deduped and start < deduped[-1][1]:
+            if (end - start) > (deduped[-1][1] - deduped[-1][0]):
+                deduped[-1] = (start, end, header_text)
+            continue
+        deduped.append((start, end, header_text))
+
+    # Build sections
+    sections = []
+
+    # Text before first header (preamble)
+    if deduped[0][0] > 0:
+        preamble = text[: deduped[0][0]].strip()
+        if preamble:
+            sections.append({"header": None, "body": preamble})
+
+    for i, (start, end, header_text) in enumerate(deduped):
+        next_start = deduped[i + 1][0] if i + 1 < len(deduped) else len(text)
+        body = text[end:next_start].strip()
+        if body or header_text:
+            sections.append({"header": header_text, "body": body})
+
+    return sections
+
+
+# ---------------------------------------------------------------------------
+# File readers — PDF, DOCX, TXT, Excel
 # ---------------------------------------------------------------------------
 
 def _parse_page_range(page_range: str | None, total_pages: int) -> list[int]:
@@ -191,15 +289,7 @@ def _parse_page_range(page_range: str | None, total_pages: int) -> list[int]:
 
 
 def _read_pdf(path: Path, page_range: str | None = None) -> str:
-    """
-    Extract text from a PDF file.
-
-    Args:
-        path: Path to the PDF.
-        page_range: Optional page selection string (1-based, human-friendly).
-                    Examples: "5", "1-10", "1-5,8,12-15".
-                    None or "" reads all pages.
-    """
+    """Extract text from a PDF file."""
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -218,7 +308,6 @@ def _read_pdf(path: Path, page_range: str | None = None) -> str:
             )
             return ""
 
-        # Extract per-page text with metadata for smart scoring
         extracted: list[dict] = []
         for i in indices:
             text = reader.pages[i].extract_text() or ""
@@ -231,11 +320,9 @@ def _read_pdf(path: Path, page_range: str | None = None) -> str:
 
         total_chars = sum(p["chars"] for p in extracted)
 
-        # Large PDF → smart page selection with importance scoring
         if total_chars > _SMART_TRUNCATE_CHAR_LIMIT:
             return _smart_select_pages(extracted)
 
-        # Normal PDF → concatenate and sanitize
         return sanitize_document_text("\n\n".join(p["text"] for p in extracted))
     except Exception as e:
         logger.warning(f"Failed to read PDF {path.name}: {e}")
@@ -268,11 +355,72 @@ def _read_txt(path: Path) -> str:
         return ""
 
 
+def _read_excel(path: Path) -> str:
+    """Read an Excel file (.xlsx/.xls/.csv) and convert to markdown tables.
+
+    Each sheet is rendered as a separate markdown table with a header.
+    For CSV files, the single table is returned directly.
+    """
+    ext = path.suffix.lower()
+
+    try:
+        import pandas as pd
+    except ImportError:
+        logger.warning("pandas not installed — cannot read Excel/CSV files")
+        return ""
+
+    try:
+        if ext == ".csv":
+            dfs = {"Sheet1": pd.read_csv(str(path))}
+        else:
+            # openpyxl for .xlsx, xlrd for .xls (pandas auto-selects engine)
+            dfs = pd.read_excel(str(path), sheet_name=None)
+
+        parts: list[str] = []
+        for sheet_name, df in dfs.items():
+            if df.empty:
+                continue
+            # Cap at 500 rows to avoid blowing up context
+            if len(df) > 500:
+                df = df.head(500)
+                truncated = True
+            else:
+                truncated = False
+
+            # Clean: drop fully-empty columns, fill NaN
+            df = df.dropna(axis=1, how="all")
+            df = df.fillna("")
+
+            header = f"## Sheet: {sheet_name}" if len(dfs) > 1 else f"## {path.stem}"
+            md_table = df.to_markdown(index=False)
+            if truncated:
+                md_table += f"\n\n[... truncated at 500 rows, {len(dfs[sheet_name])} total ...]"
+
+            parts.append(f"{header}\n\n{md_table}")
+
+        combined = "\n\n---\n\n".join(parts)
+        if not combined.strip():
+            return ""
+
+        logger.info(
+            f"Excel {path.name}: {len(dfs)} sheet(s), "
+            f"{sum(len(df) for df in dfs.values())} total rows"
+        )
+        return sanitize_document_text(combined)
+
+    except Exception as e:
+        logger.warning(f"Failed to read Excel {path.name}: {e}")
+        return ""
+
+
 _READERS = {
     ".pdf": _read_pdf,
     ".docx": _read_docx,
     ".doc": _read_docx,  # best-effort — python-docx handles some .doc files
     ".txt": _read_txt,
+    ".xlsx": _read_excel,
+    ".xls": _read_excel,
+    ".csv": _read_excel,
 }
 
 
@@ -280,81 +428,208 @@ _READERS = {
 # Boilerplate removal (equity research disclosures)
 # ---------------------------------------------------------------------------
 
-_DISCARD_PATTERNS = [
-    r"disclosure appendix",
-    r"important disclosures",
-    r"regulatory disclosures",
+# Phrases that start a boilerplate block — ported from KB chunker
+_BOILERPLATE_STARTS = [
+    r"this (?:document|report|material|presentation|publication) is (?:provided|published|distributed|intended) (?:for|solely|by)",
+    r"this (?:report|material) (?:has been|was) (?:prepared|produced|published) by",
+    r"(?:important|required) disclosures?",
+    r"(?:important|general) (?:legal )?information",
     r"analyst certification",
+    r"the analyst(?:s)? (?:responsible|named|hereby certif)",
+    r"past performance (?:is|does) not (?:necessarily )?(?:indicative|a guarantee|guarantee)",
+    r"(?:this|the) (?:document|report|research|material) (?:is|should) not (?:be )?(?:considered|construed|relied|used)",
+    r"not (?:fdic )?insured",
+    r"all rights reserved",
+    r"for (?:important|additional|further) disclosures?",
+    r"see (?:important|additional|required) disclosures?",
+    r"regulatory disclosures?",
+    r"disclosure appendix",
+    r"(?:copyright|©)\s*\d{4}",
+    r"registered (?:broker[- ]?dealer|investment advis|with the (?:sec|fca|finra))",
+    r"member (?:finra|sipc|fdic|nyse|nfa)",
+    r"conflicts? of interest",
+    r"for the exclusive use of",
     r"not an offer to sell",
-    r"past performance",
 ]
 
-_SECTION_BREAK = re.compile(r"^(exhibit|figure|table)\s+\d+", re.IGNORECASE)
+_BOILERPLATE_PATTERNS = [
+    re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _BOILERPLATE_STARTS
+]
+
+# Full-block patterns — if a paragraph matches these entirely, remove it
+_FULL_BLOCK_REMOVALS = [
+    re.compile(r"^\s*(?:source|sources?):\s*.{0,100}\s*$", re.IGNORECASE),
+    re.compile(r"^\s*\d{1,3}\s*$"),  # standalone page numbers
+    re.compile(r"^\s*[0-9a-f]{32}\s*$"),  # document tracking hex codes
+]
 
 
 def _strip_boilerplate(text: str) -> str:
-    """Remove trailing disclosure / boilerplate sections."""
-    for pattern in _DISCARD_PATTERNS:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            text = text[:match.start()]
-    return text.strip()
+    """Remove boilerplate legal, disclosure, and publication paragraphs.
+
+    Upgraded from simple trailing-match to per-paragraph scanning (KB approach).
+    """
+    if not text:
+        return text
+
+    paragraphs = re.split(r"\n\s*\n", text)
+    clean = []
+
+    for para in paragraphs:
+        stripped = para.strip()
+        if not stripped:
+            continue
+
+        # Skip standalone page numbers / tiny artifacts
+        if len(stripped) < 10:
+            is_artifact = any(pat.match(stripped) for pat in _FULL_BLOCK_REMOVALS)
+            if is_artifact:
+                continue
+
+        # Check if paragraph starts with a boilerplate phrase
+        is_boilerplate = any(
+            pat.search(stripped[:300]) for pat in _BOILERPLATE_PATTERNS
+        )
+        if not is_boilerplate:
+            clean.append(stripped)
+
+    return "\n\n".join(clean)
 
 
 # ---------------------------------------------------------------------------
-# Chunking logic
+# Chunking logic — section-aware with overlap (ported from KB)
 # ---------------------------------------------------------------------------
 
 # Files under this token count are injected whole (no chunking needed)
-SMALL_FILE_THRESHOLD = 3000  # ~3K tokens ≈ 2-3 pages
+SMALL_FILE_THRESHOLD = 3000  # ~3K tokens ~ 2-3 pages
 
 # Max tokens per chunk when chunking is needed
 MAX_CHUNK_TOKENS = 800
 
+# Overlap between consecutive chunks (tokens)
+CHUNK_OVERLAP = 100
+
+# Minimum chunk size — discard smaller fragments
+MIN_CHUNK_TOKENS = 50
+
+# Separator priority for recursive splitting
+_SEPARATORS = ["\n\n", "\n", ". ", " "]
+
+
+def _recursive_split(text: str, separators: list[str]) -> list[str]:
+    """Recursively split text using priority-ordered separators.
+
+    Tries the first separator; if any piece is still too large,
+    recurses with the next separator.
+    """
+    if not separators:
+        return [text] if text.strip() else []
+
+    sep = separators[0]
+    remaining = separators[1:]
+
+    parts = text.split(sep)
+    result = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if _count_tokens(part) <= MAX_CHUNK_TOKENS:
+            result.append(part)
+        else:
+            result.extend(_recursive_split(part, remaining))
+
+    return result
+
 
 def _chunk_text(text: str) -> list[str]:
     """
-    Split text into token-bounded chunks, respecting paragraph and section breaks.
+    Section-aware chunking with overlap.
 
-    Adapted from EquityResearchChunker in the local chunker project.
+    Strategy (ported from knowledge-base chunker):
+      1. Strip boilerplate
+      2. Detect structural sections (headers, numbered sections, topic shifts)
+      3. Chunk each section independently (prevents cross-section straddling)
+      4. Within sections, use recursive separator splitting with overlap
     """
     text = _strip_boilerplate(text)
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if not text.strip():
+        return []
 
-    chunks: list[str] = []
-    current: list[str] = []
-    token_count = 0
+    sections = _detect_sections(text)
 
-    for para in paragraphs:
-        para_tokens = _count_tokens(para)
+    all_chunks: list[str] = []
 
-        # Section break → flush current chunk
-        if _SECTION_BREAK.match(para):
-            if current:
-                chunks.append("\n\n".join(current))
-                current = []
-                token_count = 0
+    for section in sections:
+        section_text = ""
+        if section["header"]:
+            section_text = section["header"] + "\n\n"
+        section_text += section["body"]
+        section_text = section_text.strip()
 
-        # Would exceed limit → flush and start new chunk
-        if token_count + para_tokens > MAX_CHUNK_TOKENS and current:
-            chunks.append("\n\n".join(current))
-            current = [para]
-            token_count = para_tokens
-        else:
-            current.append(para)
-            token_count += para_tokens
+        if not section_text:
+            continue
 
-    if current:
-        chunks.append("\n\n".join(current))
+        # If the section fits in one chunk, take it whole
+        section_tokens = _count_tokens(section_text)
+        if section_tokens <= MAX_CHUNK_TOKENS:
+            if section_tokens >= MIN_CHUNK_TOKENS:
+                all_chunks.append(section_text)
+            continue
 
-    return chunks
+        # Split section into pieces using recursive separators
+        splits = _recursive_split(section_text, _SEPARATORS)
+
+        # Merge splits into chunks with overlap
+        current_parts: list[str] = []
+        current_tokens = 0
+
+        for split_text in splits:
+            split_tokens = _count_tokens(split_text)
+
+            if current_tokens + split_tokens <= MAX_CHUNK_TOKENS:
+                current_parts.append(split_text)
+                current_tokens += split_tokens
+            else:
+                # Flush current chunk
+                if current_parts:
+                    chunk_text = " ".join(current_parts).strip()
+                    ct = _count_tokens(chunk_text)
+                    if ct >= MIN_CHUNK_TOKENS:
+                        all_chunks.append(chunk_text)
+
+                    # Overlap: keep last N tokens worth of parts
+                    overlap_parts: list[str] = []
+                    overlap_tokens = 0
+                    for part in reversed(current_parts):
+                        pt = _count_tokens(part)
+                        if overlap_tokens + pt <= CHUNK_OVERLAP:
+                            overlap_parts.insert(0, part)
+                            overlap_tokens += pt
+                        else:
+                            break
+
+                    current_parts = overlap_parts + [split_text]
+                    current_tokens = overlap_tokens + split_tokens
+                else:
+                    current_parts = [split_text]
+                    current_tokens = split_tokens
+
+        # Flush final chunk for this section
+        if current_parts:
+            chunk_text = " ".join(current_parts).strip()
+            ct = _count_tokens(chunk_text)
+            if ct >= MIN_CHUNK_TOKENS:
+                all_chunks.append(chunk_text)
+
+    return all_chunks
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-MAX_FILES = 5
+MAX_FILES = 10
 
 
 def process_uploads(
@@ -443,7 +718,7 @@ def process_uploads(
                     f"KB: {path.name} — {total_tokens} tokens, injecting whole"
                 )
             else:
-                # Large file → chunk
+                # Large file → section-aware chunk with overlap
                 chunks = _chunk_text(text)
                 if not chunks:
                     kb_docs.append({

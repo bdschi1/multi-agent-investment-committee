@@ -23,9 +23,36 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Small-model coercion — handles dicts/non-strings in list[str] fields
+# ---------------------------------------------------------------------------
+
+def _coerce_str_list(v: Any) -> list[str]:
+    """
+    Coerce list items to strings.
+
+    Small models (e.g. Ollama llama3.1:8b) sometimes return dicts where
+    strings are expected — e.g. {"metric_name": "P/E", "value": 33.46}
+    instead of "P/E ratio of 33.46x". This validator flattens those
+    dicts into readable strings so Pydantic validation doesn't fail.
+    """
+    if not isinstance(v, list):
+        return v
+    result = []
+    for item in v:
+        if isinstance(item, dict):
+            parts = [f"{k}: {val}" for k, val in item.items()]
+            result.append(", ".join(parts))
+        elif isinstance(item, str):
+            result.append(item)
+        else:
+            result.append(str(item))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +183,11 @@ class BullCase(BaseModel):
         description="Position sizing in risk units with role-in-book and drawdown tolerance",
     )
 
+    @field_validator("supporting_evidence", "catalysts", mode="before")
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
+
 
 class BearCase(BaseModel):
     """Structured output from the Risk Manager."""
@@ -182,6 +214,11 @@ class BearCase(BaseModel):
         default=None,
         description="Short/hedge sizing in risk units with drawdown triggers",
     )
+
+    @field_validator("risks", "second_order_effects", "third_order_effects", mode="before")
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
 
 
 class MacroView(BaseModel):
@@ -280,6 +317,11 @@ class MacroView(BaseModel):
             "volatility is persistent and partially predictable."
         ),
     )
+
+    @field_validator("cycle_evidence", "geopolitical_risks", "tailwinds", "headwinds", mode="before")
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +465,15 @@ class CommitteeMemo(BaseModel):
         description="T = direction * entropy-adjusted confidence. Range [-1, 1].",
     )
 
+    @field_validator(
+        "key_factors", "bull_points_accepted", "bear_points_accepted",
+        "dissenting_points", "risk_mitigants", "event_path",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
+
 
 class Rebuttal(BaseModel):
     """A structured rebuttal from one agent to another's analysis."""
@@ -432,6 +483,11 @@ class Rebuttal(BaseModel):
     points: list[str] = Field(default_factory=list)
     concessions: list[str] = Field(default_factory=list)
     revised_conviction: Optional[float] = None
+
+    @field_validator("points", "concessions", mode="before")
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
 
 
 # ---------------------------------------------------------------------------

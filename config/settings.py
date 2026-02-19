@@ -13,7 +13,6 @@ Supported LLM providers:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,35 +43,35 @@ class Settings(BaseSettings):
     )
 
     # --- Anthropic (Claude) ---
-    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
+    anthropic_api_key: str | None = Field(default=None, description="Anthropic API key")
     anthropic_model: str = Field(
         default="claude-sonnet-4-20250514",
         description="Anthropic model name",
     )
 
     # --- Google (Gemini) ---
-    google_api_key: Optional[str] = Field(default=None, description="Google AI API key")
+    google_api_key: str | None = Field(default=None, description="Google AI API key")
     google_model: str = Field(
         default="gemini-2.0-flash",
         description="Google Gemini model name",
     )
 
     # --- OpenAI ---
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
+    openai_api_key: str | None = Field(default=None, description="OpenAI API key")
     openai_model: str = Field(
         default="gpt-4o-mini",
         description="OpenAI model name",
     )
 
     # --- Hugging Face ---
-    hf_token: Optional[str] = Field(default=None, description="Hugging Face API token")
+    hf_token: str | None = Field(default=None, description="Hugging Face API token")
     hf_model: str = Field(
         default="Qwen/Qwen2.5-72B-Instruct",
         description="HuggingFace model ID for inference",
     )
 
     # --- DeepSeek ---
-    deepseek_api_key: Optional[str] = Field(default=None, description="DeepSeek API key")
+    deepseek_api_key: str | None = Field(default=None, description="DeepSeek API key")
     deepseek_model: str = Field(
         default="deepseek-chat",
         description="DeepSeek model name",

@@ -17,7 +17,6 @@ import json
 from agents.base import parse_tool_calls
 from tools.registry import ToolRegistry, ToolSpec, build_default_registry
 
-
 # ---------------------------------------------------------------------------
 # ToolRegistry Tests
 # ---------------------------------------------------------------------------
@@ -504,10 +503,10 @@ class TestAgentWithTools:
 
     def test_all_agents_accept_tool_registry(self):
         """All 4 agent constructors should accept tool_registry kwarg."""
-        from agents.sector_analyst import SectorAnalystAgent
-        from agents.risk_manager import RiskManagerAgent
         from agents.macro_analyst import MacroAnalystAgent
         from agents.portfolio_manager import PortfolioManagerAgent
+        from agents.risk_manager import RiskManagerAgent
+        from agents.sector_analyst import SectorAnalystAgent
 
         mock = MockLLMWithTools()
         registry = ToolRegistry(max_calls_per_agent=5)
@@ -528,8 +527,8 @@ class TestGraphWithTools:
 
     def test_graph_run_with_tools(self):
         """Graph should run with tool registry and produce valid result."""
-        from orchestrator.graph import run_graph
         from orchestrator.committee import CommitteeResult
+        from orchestrator.graph import run_graph
 
         mock = MockLLMWithTools()
 
@@ -564,8 +563,8 @@ class TestGraphWithTools:
 
     def test_graph_run_without_tools(self):
         """Graph should still work when tool_registry is explicitly None."""
-        from orchestrator.graph import run_graph
         from orchestrator.committee import CommitteeResult
+        from orchestrator.graph import run_graph
 
         mock = MockLLMWithTools()
         result = run_graph(

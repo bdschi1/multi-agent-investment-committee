@@ -14,12 +14,11 @@ from __future__ import annotations
 import logging
 import statistics
 from datetime import timedelta
-from typing import Optional
 
 import yfinance as yf
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, BenchmarkComparison
+from backtest.models import BenchmarkComparison, SignalRecord
 
 logger = logging.getLogger(__name__)
 

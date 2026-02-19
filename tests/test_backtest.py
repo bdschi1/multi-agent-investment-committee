@@ -6,30 +6,27 @@ All tests use in-memory databases and mock data — no API keys needed.
 
 from __future__ import annotations
 
-import json
-import statistics
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backtest.database import SignalDatabase
-from backtest.models import (
-    SignalRecord,
-    PortfolioSnapshot,
-    BacktestResult,
-    CalibrationBucket,
-    AlphaDecayPoint,
-    BenchmarkComparison,
-    AttributionResult,
-)
-from backtest.runner import BacktestRunner, _rank_ic
-from backtest.calibration import CalibrationAnalyzer
 from backtest.alpha_decay import AlphaDecayAnalyzer
 from backtest.benchmark import BenchmarkAnalyzer
-from backtest.portfolio import MultiAssetPortfolio
+from backtest.calibration import CalibrationAnalyzer
+from backtest.database import SignalDatabase
 from backtest.explainability import ExplainabilityAnalyzer
-
+from backtest.models import (
+    AlphaDecayPoint,
+    AttributionResult,
+    BacktestResult,
+    BenchmarkComparison,
+    CalibrationBucket,
+    PortfolioSnapshot,
+    SignalRecord,
+)
+from backtest.portfolio import MultiAssetPortfolio
+from backtest.runner import BacktestRunner, _rank_ic
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -47,7 +44,7 @@ def populated_db(db):
     signals = [
         # NVDA: strong long, correct
         SignalRecord(
-            ticker="NVDA", signal_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            ticker="NVDA", signal_date=datetime(2025, 1, 15, tzinfo=UTC),
             provider="anthropic", model_name="claude-sonnet",
             recommendation="BUY", t_signal=0.72, conviction=7.2,
             position_direction=1, raw_confidence=0.72,
@@ -58,7 +55,7 @@ def populated_db(db):
         ),
         # NVDA: weak long, wrong
         SignalRecord(
-            ticker="NVDA", signal_date=datetime(2025, 2, 15, tzinfo=timezone.utc),
+            ticker="NVDA", signal_date=datetime(2025, 2, 15, tzinfo=UTC),
             provider="ollama", model_name="llama3.1:8b",
             recommendation="HOLD", t_signal=0.1, conviction=5.2,
             position_direction=1, raw_confidence=0.52,
@@ -69,7 +66,7 @@ def populated_db(db):
         ),
         # COST: short, correct
         SignalRecord(
-            ticker="COST", signal_date=datetime(2025, 1, 20, tzinfo=timezone.utc),
+            ticker="COST", signal_date=datetime(2025, 1, 20, tzinfo=UTC),
             provider="anthropic", model_name="claude-sonnet",
             recommendation="SELL", t_signal=-0.65, conviction=8.0,
             position_direction=-1, raw_confidence=0.65,
@@ -80,7 +77,7 @@ def populated_db(db):
         ),
         # AAPL: neutral (no direction), should be excluded from directional analysis
         SignalRecord(
-            ticker="AAPL", signal_date=datetime(2025, 1, 25, tzinfo=timezone.utc),
+            ticker="AAPL", signal_date=datetime(2025, 1, 25, tzinfo=UTC),
             provider="anthropic", model_name="claude-sonnet",
             recommendation="HOLD", t_signal=0.0, conviction=5.0,
             position_direction=0, raw_confidence=0.5,
@@ -91,7 +88,7 @@ def populated_db(db):
         ),
         # META: strong long, correct (high conviction)
         SignalRecord(
-            ticker="META", signal_date=datetime(2025, 2, 1, tzinfo=timezone.utc),
+            ticker="META", signal_date=datetime(2025, 2, 1, tzinfo=UTC),
             provider="anthropic", model_name="claude-sonnet",
             recommendation="STRONG BUY", t_signal=0.85, conviction=9.0,
             position_direction=1, raw_confidence=0.85,
@@ -115,7 +112,7 @@ def populated_db(db):
 class TestSignalDatabase:
     def test_store_and_retrieve(self, db):
         sig = SignalRecord(
-            ticker="TSLA", signal_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ticker="TSLA", signal_date=datetime(2025, 1, 1, tzinfo=UTC),
             t_signal=0.5, conviction=7.0, position_direction=1,
         )
         sig_id = db.store_signal(sig)
@@ -136,7 +133,7 @@ class TestSignalDatabase:
 
     def test_update_returns(self, db):
         sig = SignalRecord(
-            ticker="MSFT", signal_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ticker="MSFT", signal_date=datetime(2025, 1, 1, tzinfo=UTC),
         )
         sig_id = db.store_signal(sig)
         db.update_returns(sig_id, return_1d=0.02, return_5d=0.05)

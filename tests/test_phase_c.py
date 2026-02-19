@@ -12,7 +12,6 @@ Tests cover:
 import json
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Mock LLM — same pattern as test_graph.py / test_tools_phase_b.py
 # ---------------------------------------------------------------------------
@@ -135,7 +134,7 @@ class TestSessionMemory:
         clear_session()
 
     def test_store_and_retrieve(self):
-        from orchestrator.memory import store_analysis, get_prior_analyses
+        from orchestrator.memory import get_prior_analyses, store_analysis
 
         store_analysis("NVDA", {
             "recommendation": "BUY",
@@ -150,14 +149,14 @@ class TestSessionMemory:
         assert prior[0]["conviction"] == 7.5
 
     def test_case_insensitive_ticker(self):
-        from orchestrator.memory import store_analysis, get_prior_analyses
+        from orchestrator.memory import get_prior_analyses, store_analysis
 
         store_analysis("nvda", {"recommendation": "BUY"})
         prior = get_prior_analyses("NVDA")
         assert len(prior) == 1
 
     def test_multiple_analyses_same_ticker(self):
-        from orchestrator.memory import store_analysis, get_prior_analyses
+        from orchestrator.memory import get_prior_analyses, store_analysis
 
         store_analysis("NVDA", {"recommendation": "BUY", "conviction": 7.0})
         store_analysis("NVDA", {"recommendation": "HOLD", "conviction": 5.0})
@@ -168,7 +167,7 @@ class TestSessionMemory:
         assert prior[1]["recommendation"] == "HOLD"
 
     def test_different_tickers_isolated(self):
-        from orchestrator.memory import store_analysis, get_prior_analyses
+        from orchestrator.memory import get_prior_analyses, store_analysis
 
         store_analysis("NVDA", {"recommendation": "BUY"})
         store_analysis("AAPL", {"recommendation": "HOLD"})
@@ -181,7 +180,7 @@ class TestSessionMemory:
         assert aapl[0]["recommendation"] == "HOLD"
 
     def test_clear_session(self):
-        from orchestrator.memory import store_analysis, get_prior_analyses, clear_session
+        from orchestrator.memory import clear_session, get_prior_analyses, store_analysis
 
         store_analysis("NVDA", {"recommendation": "BUY"})
         assert len(get_prior_analyses("NVDA")) == 1
@@ -194,7 +193,7 @@ class TestSessionMemory:
         assert get_prior_analyses("UNKNOWN") == []
 
     def test_session_tickers(self):
-        from orchestrator.memory import store_analysis, get_session_tickers
+        from orchestrator.memory import get_session_tickers, store_analysis
 
         store_analysis("NVDA", {"recommendation": "BUY"})
         store_analysis("AAPL", {"recommendation": "HOLD"})
@@ -204,7 +203,7 @@ class TestSessionMemory:
         assert "AAPL" in tickers
 
     def test_session_summary(self):
-        from orchestrator.memory import store_analysis, get_session_summary
+        from orchestrator.memory import get_session_summary, store_analysis
 
         store_analysis("NVDA", {"recommendation": "BUY"})
         store_analysis("NVDA", {"recommendation": "HOLD"})
@@ -265,8 +264,9 @@ class TestConfigPattern:
 
     def test_nodes_accept_config_param(self):
         """All node functions should accept an optional config parameter."""
-        from orchestrator import nodes
         import inspect
+
+        from orchestrator import nodes
 
         node_funcs = [
             nodes.gather_data,
@@ -445,8 +445,8 @@ class TestPMSessionMemory:
 
     def test_prior_analyses_in_pm_context(self):
         """After storing an analysis, the PM should receive prior analyses."""
-        from orchestrator.memory import store_analysis
         from orchestrator.graph import run_graph_phase1, run_graph_phase2
+        from orchestrator.memory import store_analysis
 
         # Store a prior analysis
         store_analysis("TEST", {

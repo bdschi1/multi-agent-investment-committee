@@ -4,8 +4,7 @@ Data models for the backtest and analytics system.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -13,9 +12,9 @@ from pydantic import BaseModel, Field
 class SignalRecord(BaseModel):
     """A single IC signal stored in the database."""
 
-    id: Optional[int] = None
+    id: int | None = None
     ticker: str
-    signal_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    signal_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
     provider: str = ""
     model_name: str = ""
 
@@ -30,38 +29,38 @@ class SignalRecord(BaseModel):
     macro_favorability: float = 5.0
 
     # BL optimizer outputs
-    bl_optimal_weight: Optional[float] = None
-    bl_sharpe: Optional[float] = None
-    bl_sortino: Optional[float] = None
+    bl_optimal_weight: float | None = None
+    bl_sharpe: float | None = None
+    bl_sortino: float | None = None
 
     # Heuristic outputs
-    sharpe_heuristic: Optional[float] = None
-    sortino_heuristic: Optional[float] = None
+    sharpe_heuristic: float | None = None
+    sortino_heuristic: float | None = None
 
     # Realized returns (filled later by backtest)
-    price_at_signal: Optional[float] = None
-    return_1d: Optional[float] = None
-    return_5d: Optional[float] = None
-    return_10d: Optional[float] = None
-    return_20d: Optional[float] = None
-    return_60d: Optional[float] = None
+    price_at_signal: float | None = None
+    return_1d: float | None = None
+    return_5d: float | None = None
+    return_10d: float | None = None
+    return_20d: float | None = None
+    return_60d: float | None = None
 
     # Metadata
     duration_s: float = 0.0
     total_tokens: int = 0
 
     # Explainability
-    bull_influence: Optional[float] = None
-    bear_influence: Optional[float] = None
-    macro_influence: Optional[float] = None
-    debate_shift: Optional[float] = None
+    bull_influence: float | None = None
+    bear_influence: float | None = None
+    macro_influence: float | None = None
+    debate_shift: float | None = None
 
 
 class PortfolioSnapshot(BaseModel):
     """Point-in-time snapshot of the paper portfolio."""
 
-    id: Optional[int] = None
-    snapshot_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    id: int | None = None
+    snapshot_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
     tickers: list[str] = Field(default_factory=list)
     weights: dict[str, float] = Field(default_factory=dict)
     t_signals: dict[str, float] = Field(default_factory=dict)
@@ -70,7 +69,7 @@ class PortfolioSnapshot(BaseModel):
     portfolio_return: float = 0.0
     cumulative_return: float = 0.0
     drawdown: float = 0.0
-    portfolio_sharpe: Optional[float] = None
+    portfolio_sharpe: float | None = None
     num_longs: int = 0
     num_shorts: int = 0
 
@@ -78,8 +77,8 @@ class PortfolioSnapshot(BaseModel):
 class BacktestResult(BaseModel):
     """Summary result of a backtest run."""
 
-    id: Optional[int] = None
-    run_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    id: int | None = None
+    run_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
     start_date: str = ""
     end_date: str = ""
     tickers: list[str] = Field(default_factory=list)
@@ -108,11 +107,11 @@ class BacktestResult(BaseModel):
     excess_return_vs_spy: float = 0.0
 
     # Alpha decay
-    ic_1d: Optional[float] = None
-    ic_5d: Optional[float] = None
-    ic_20d: Optional[float] = None
-    ic_60d: Optional[float] = None
-    optimal_holding_period: Optional[int] = None
+    ic_1d: float | None = None
+    ic_5d: float | None = None
+    ic_20d: float | None = None
+    ic_60d: float | None = None
+    optimal_holding_period: int | None = None
 
 
 class CalibrationBucket(BaseModel):

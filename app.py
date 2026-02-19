@@ -30,22 +30,22 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import gradio as gr
 
-from config.settings import settings, LLMProvider
+from config.settings import LLMProvider, settings
+from orchestrator.committee import CommitteeResult, InvestmentCommittee
 from orchestrator.conviction_chart import (
     build_conviction_probability,
     build_conviction_trajectory,
 )
-from tools.data_aggregator import DataAggregator
-from orchestrator.committee import InvestmentCommittee, CommitteeResult
-from orchestrator.reasoning_trace import TraceRenderer
 from orchestrator.graph import run_graph_phase1, run_graph_phase2
 from orchestrator.memory import store_analysis
+from orchestrator.reasoning_trace import TraceRenderer
+from tools.data_aggregator import DataAggregator
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)
@@ -441,7 +441,7 @@ def _persist_signal(result: CommitteeResult, provider_name: str, model_name: str
 
         signal = SignalRecord(
             ticker=result.ticker,
-            signal_date=datetime.now(timezone.utc),
+            signal_date=datetime.now(UTC),
             provider=provider_name,
             model_name=model_name,
             recommendation=memo.recommendation,
@@ -481,7 +481,7 @@ def _log_run(result: CommitteeResult, provider_name: str, model_name: str,
     try:
         log_file = RUNS_DIR / "run_log.jsonl"
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "ticker": result.ticker,
             "provider": provider_name,
             "model": model_name,
@@ -588,7 +588,7 @@ def run_committee_analysis(
 
         # Process uploaded KB documents (resilient — failures noted, not fatal)
         if uploaded_files:
-            from tools.doc_chunker import process_uploads, format_kb_for_prompt, get_upload_summary
+            from tools.doc_chunker import format_kb_for_prompt, get_upload_summary, process_uploads
             kb_docs = process_uploads(uploaded_files)
             if kb_docs:
                 kb_prompt = format_kb_for_prompt(kb_docs)
@@ -733,7 +733,7 @@ def run_phase1_analysis(
 
         # Process uploaded KB documents (resilient — failures noted, not fatal)
         if uploaded_files:
-            from tools.doc_chunker import process_uploads, format_kb_for_prompt, get_upload_summary
+            from tools.doc_chunker import format_kb_for_prompt, get_upload_summary, process_uploads
             kb_docs = process_uploads(uploaded_files)
             if kb_docs:
                 kb_prompt = format_kb_for_prompt(kb_docs)
@@ -1020,7 +1020,7 @@ def _format_debate_preview(state: dict) -> str:
 
 def _build_session_section() -> str:
     """Build a session memory summary section for the exported report."""
-    from orchestrator.memory import get_session_summary, get_prior_analyses
+    from orchestrator.memory import get_prior_analyses, get_session_summary
 
     summary = get_session_summary()
     if not summary:

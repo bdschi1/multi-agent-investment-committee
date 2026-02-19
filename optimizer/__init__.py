@@ -6,7 +6,7 @@ the PM's conviction output. Runs as a LangGraph node between
 run_portfolio_manager and finalize.
 """
 
-from optimizer.models import OptimizationResult, OptimizerFallback
 from optimizer.bl_optimizer import run_black_litterman
+from optimizer.models import OptimizationResult, OptimizerFallback
 
 __all__ = ["run_black_litterman", "OptimizationResult", "OptimizerFallback"]

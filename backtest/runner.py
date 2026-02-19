@@ -8,13 +8,12 @@ the signal date and comparing predicted direction vs actual return.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import yfinance as yf
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, BacktestResult, PortfolioSnapshot
+from backtest.models import BacktestResult, SignalRecord
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +139,7 @@ class BacktestRunner:
 
         if not evaluated:
             return BacktestResult(
-                run_date=datetime.now(timezone.utc),
+                run_date=datetime.now(UTC),
                 tickers=list({s.ticker for s in signals}),
                 provider=provider or "all",
                 num_signals=0,
@@ -236,7 +235,7 @@ class BacktestRunner:
         tickers_list = sorted(set(s.ticker for s in evaluated))
 
         return BacktestResult(
-            run_date=datetime.now(timezone.utc),
+            run_date=datetime.now(UTC),
             start_date=min(s.signal_date for s in evaluated).isoformat(),
             end_date=max(s.signal_date for s in evaluated).isoformat(),
             tickers=tickers_list,

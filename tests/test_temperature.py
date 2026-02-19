@@ -11,9 +11,6 @@ Verifies that:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock
-
 
 class TestWithTemperature:
     """Test the with_temperature() wrapper."""
@@ -109,16 +106,16 @@ class TestGetNodeTemperature:
 
     def test_unknown_node_falls_back(self):
         """Unknown nodes fall back to settings.temperature."""
-        from orchestrator.temperature import get_node_temperature
         from config.settings import settings
+        from orchestrator.temperature import get_node_temperature
 
         result = get_node_temperature("nonexistent_node")
         assert result == settings.temperature
 
     def test_user_override(self):
         """settings.task_temperatures overrides built-in defaults."""
-        from orchestrator.temperature import get_node_temperature
         from config.settings import settings
+        from orchestrator.temperature import get_node_temperature
 
         original = settings.task_temperatures
         try:

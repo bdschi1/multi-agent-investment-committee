@@ -29,16 +29,16 @@ Phase C: Two-phase execution (HITL)
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
-from langgraph.graph import StateGraph, END, START
+from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from orchestrator.state import CommitteeState
-from orchestrator.committee import CommitteeResult
-from orchestrator import nodes
 from optimizer.node import run_optimizer
-
+from orchestrator import nodes
+from orchestrator.committee import CommitteeResult
+from orchestrator.state import CommitteeState
 
 # ---------------------------------------------------------------------------
 # Routing functions (conditional edges)
@@ -269,7 +269,7 @@ def _state_to_result(state: dict) -> CommitteeResult:
 
 def _build_config(
     model: Any = None,
-    on_status: Optional[Callable[[str], None]] = None,
+    on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
 ) -> dict:
     """Build a LangGraph config dict with configurable non-serializable objects."""
@@ -292,8 +292,8 @@ def _maybe_build_tool_registry(tool_registry: Any = None) -> Any:
     if tool_registry is not None:
         return tool_registry
     try:
-        from tools.registry import build_default_registry
         from config.settings import settings
+        from tools.registry import build_default_registry
         if settings.max_tool_calls_per_agent > 0:
             return build_default_registry(
                 max_calls=settings.max_tool_calls_per_agent
@@ -312,7 +312,7 @@ def run_graph(
     context: dict[str, Any],
     model: Any,
     max_debate_rounds: int = 2,
-    on_status: Optional[Callable[[str], None]] = None,
+    on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
 ) -> CommitteeResult:
     """
@@ -372,7 +372,7 @@ def run_graph_phase1(
     context: dict[str, Any],
     model: Any,
     max_debate_rounds: int = 2,
-    on_status: Optional[Callable[[str], None]] = None,
+    on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
 ) -> dict[str, Any]:
     """
@@ -430,7 +430,7 @@ def run_graph_phase2(
     intermediate_state: dict[str, Any],
     model: Any,
     pm_guidance: str = "",
-    on_status: Optional[Callable[[str], None]] = None,
+    on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
 ) -> CommitteeResult:
     """

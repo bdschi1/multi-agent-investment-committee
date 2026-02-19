@@ -9,14 +9,12 @@ risk metrics (gross/net exposure, concentration, sector balance).
 from __future__ import annotations
 
 import logging
-import statistics
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import yfinance as yf
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, PortfolioSnapshot
+from backtest.models import PortfolioSnapshot, SignalRecord
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ class MultiAssetPortfolio:
 
         if not eligible:
             return PortfolioSnapshot(
-                snapshot_date=datetime.now(timezone.utc),
+                snapshot_date=datetime.now(UTC),
             )
 
         # Sort by abs(t_signal) descending, take top N
@@ -86,7 +84,7 @@ class MultiAssetPortfolio:
         net_exposure = sum(weights.values())
 
         return PortfolioSnapshot(
-            snapshot_date=datetime.now(timezone.utc),
+            snapshot_date=datetime.now(UTC),
             tickers=sorted_tickers,
             weights=weights,
             t_signals=t_signals,

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 
-from orchestrator.committee import InvestmentCommittee, CommitteeResult
+from agents.base import AgentRole, ReasoningStep, ReasoningTrace, StepType
+from orchestrator.committee import CommitteeResult, InvestmentCommittee
 from orchestrator.reasoning_trace import TraceRenderer
-from agents.base import ReasoningTrace, ReasoningStep, StepType, AgentRole
 
 
 # Mock LLM that returns appropriate JSON for each agent phase

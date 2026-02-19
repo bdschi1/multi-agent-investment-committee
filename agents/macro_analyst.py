@@ -22,9 +22,8 @@ from agents.base import (
     BaseInvestmentAgent,
     MacroView,
     Rebuttal,
-    extract_json,
-    retry_extract_json,
     clean_json_artifacts,
+    retry_extract_json,
 )
 
 logger = logging.getLogger(__name__)

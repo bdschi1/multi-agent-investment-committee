@@ -19,9 +19,9 @@ import logging
 import re
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -85,9 +85,9 @@ class ReasoningStep(BaseModel):
     step_type: StepType
     agent_role: AgentRole
     content: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    duration_ms: Optional[float] = None
-    tokens_used: Optional[int] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    duration_ms: float | None = None
+    tokens_used: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -97,8 +97,8 @@ class ReasoningTrace(BaseModel):
     agent_role: AgentRole
     ticker: str
     steps: list[ReasoningStep] = Field(default_factory=list)
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = None
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
     total_tokens: int = 0
     total_duration_ms: float = 0.0
 
@@ -110,7 +110,7 @@ class ReasoningTrace(BaseModel):
             self.total_duration_ms += step.duration_ms
 
     def finalize(self) -> None:
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +482,7 @@ class Rebuttal(BaseModel):
     responding_to: AgentRole
     points: list[str] = Field(default_factory=list)
     concessions: list[str] = Field(default_factory=list)
-    revised_conviction: Optional[float] = None
+    revised_conviction: float | None = None
 
     @field_validator("points", "concessions", mode="before")
     @classmethod
@@ -890,7 +890,7 @@ class BaseInvestmentAgent(ABC):
         self.model = model
         self.role = role
         self.tool_registry = tool_registry
-        self.trace: Optional[ReasoningTrace] = None
+        self.trace: ReasoningTrace | None = None
 
     def _start_trace(self, ticker: str) -> ReasoningTrace:
         self.trace = ReasoningTrace(agent_role=self.role, ticker=ticker)

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from agents.base import ReasoningTrace, StepType
 
-
 STEP_ICONS = {
     StepType.THINK: "🧠",
     StepType.PLAN: "📋",

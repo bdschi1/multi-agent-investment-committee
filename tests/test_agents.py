@@ -8,13 +8,13 @@ This ensures CI doesn't burn credits and tests run fast.
 from __future__ import annotations
 
 import json
+
 import pytest
 
-from agents.base import AgentRole, BullCase, BearCase, CommitteeMemo, Rebuttal
-from agents.sector_analyst import SectorAnalystAgent
-from agents.risk_manager import RiskManagerAgent
+from agents.base import AgentRole, BearCase, BullCase, CommitteeMemo, Rebuttal
 from agents.portfolio_manager import PortfolioManagerAgent
-
+from agents.risk_manager import RiskManagerAgent
+from agents.sector_analyst import SectorAnalystAgent
 
 # ---------------------------------------------------------------------------
 # Mock LLM

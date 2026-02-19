@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import logging
 import statistics
-from typing import Optional
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, AttributionResult
+from backtest.models import AttributionResult, SignalRecord
 
 logger = logging.getLogger(__name__)
 

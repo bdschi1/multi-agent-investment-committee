@@ -12,7 +12,7 @@ just enough state to remember what happened earlier in the session.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def store_analysis(ticker: str, result: Any) -> None:
     ticker = ticker.upper()
 
     summary: dict[str, Any] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "ticker": ticker,
     }
 

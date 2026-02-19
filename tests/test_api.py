@@ -6,8 +6,6 @@ Tests API models and route structure without requiring live LLM providers.
 
 from __future__ import annotations
 
-import pytest
-
 from api.models import (
     AnalysisRequest,
     AnalysisResponse,

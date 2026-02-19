@@ -1,5 +1,4 @@
-from orchestrator.committee import InvestmentCommittee, CommitteeResult, ConvictionSnapshot
-from orchestrator.reasoning_trace import TraceRenderer
+from orchestrator.committee import CommitteeResult, ConvictionSnapshot, InvestmentCommittee
 from orchestrator.graph import (
     build_graph,
     build_graph_phase1,
@@ -9,12 +8,13 @@ from orchestrator.graph import (
     run_graph_phase2,
 )
 from orchestrator.memory import (
-    store_analysis,
-    get_prior_analyses,
     clear_session,
-    get_session_tickers,
+    get_prior_analyses,
     get_session_summary,
+    get_session_tickers,
+    store_analysis,
 )
+from orchestrator.reasoning_trace import TraceRenderer
 
 __all__ = [
     "InvestmentCommittee",

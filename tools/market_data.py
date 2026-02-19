@@ -25,8 +25,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from tools.data_providers.factory import get_provider_safe
 from tools.data_providers.base import MarketDataProvider
+from tools.data_providers.factory import get_provider_safe
 
 logger = logging.getLogger(__name__)
 

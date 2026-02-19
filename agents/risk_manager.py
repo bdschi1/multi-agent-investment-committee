@@ -17,9 +17,9 @@ from agents.base import (
     BaseInvestmentAgent,
     BearCase,
     Rebuttal,
+    clean_json_artifacts,
     extract_json,
     retry_extract_json,
-    clean_json_artifacts,
 )
 
 logger = logging.getLogger(__name__)

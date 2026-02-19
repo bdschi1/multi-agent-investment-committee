@@ -15,16 +15,17 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Callable
+from typing import Any
 
+from tools.earnings_data import EarningsDataTool
+from tools.financial_metrics import FinancialMetricsTool
+from tools.insider_data import InsiderDataTool
 from tools.market_data import MarketDataTool
 from tools.news_retrieval import NewsRetrievalTool
-from tools.financial_metrics import FinancialMetricsTool
 from tools.peer_comparison import PeerComparisonTool
-from tools.insider_data import InsiderDataTool
-from tools.earnings_data import EarningsDataTool
 
 logger = logging.getLogger(__name__)
 

@@ -150,7 +150,7 @@ def build_conviction_trajectory(
             line=dict(color=color, width=2.5),
             marker=dict(size=8, color=color),
             fill=show_fill,
-            fillcolor=f"rgba(200, 200, 200, 0.08)" if show_fill else None,
+            fillcolor="rgba(200, 200, 200, 0.08)" if show_fill else None,
             hovertemplate=(
                 "<b>%{x}</b><br>"
                 f"{agent}: " + "%{y:.1f}/10<br>"

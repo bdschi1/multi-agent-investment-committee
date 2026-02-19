@@ -11,10 +11,9 @@ from __future__ import annotations
 import logging
 import math
 import statistics
-from typing import Optional
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, AlphaDecayPoint
+from backtest.models import AlphaDecayPoint
 
 logger = logging.getLogger(__name__)
 

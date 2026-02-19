@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
 
 from agents.base import (
     BearCase,
@@ -24,10 +25,10 @@ from agents.base import (
     ReasoningTrace,
     Rebuttal,
 )
-from agents.sector_analyst import SectorAnalystAgent
-from agents.risk_manager import RiskManagerAgent
-from agents.portfolio_manager import PortfolioManagerAgent
 from agents.macro_analyst import MacroAnalystAgent
+from agents.portfolio_manager import PortfolioManagerAgent
+from agents.risk_manager import RiskManagerAgent
+from agents.sector_analyst import SectorAnalystAgent
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -48,13 +49,13 @@ class CommitteeResult:
     """Complete result from an investment committee session."""
 
     ticker: str
-    bull_case: Optional[BullCase] = None
-    bear_case: Optional[BearCase] = None
-    macro_view: Optional[MacroView] = None
-    analyst_rebuttal: Optional[Rebuttal] = None
-    risk_rebuttal: Optional[Rebuttal] = None
-    committee_memo: Optional[CommitteeMemo] = None
-    optimization_result: Optional[Any] = None
+    bull_case: BullCase | None = None
+    bear_case: BearCase | None = None
+    macro_view: MacroView | None = None
+    analyst_rebuttal: Rebuttal | None = None
+    risk_rebuttal: Rebuttal | None = None
+    committee_memo: CommitteeMemo | None = None
+    optimization_result: Any | None = None
     traces: dict[str, ReasoningTrace] = field(default_factory=dict)
     conviction_timeline: list[ConvictionSnapshot] = field(default_factory=list)
     parsing_failures: list[str] = field(default_factory=list)

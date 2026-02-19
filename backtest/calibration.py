@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import logging
 import statistics
-from typing import Optional
 
 from backtest.database import SignalDatabase
-from backtest.models import SignalRecord, CalibrationBucket
+from backtest.models import CalibrationBucket
 
 logger = logging.getLogger(__name__)
 

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pytest
 
-from tools.market_data import MarketDataTool, _format_large_number, _pct
-from tools.financial_metrics import FinancialMetricsTool
 from tools.data_aggregator import DataAggregator
+from tools.financial_metrics import FinancialMetricsTool
+from tools.market_data import MarketDataTool, _format_large_number, _pct
 
 
 class TestMarketDataFormatters:

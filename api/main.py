@@ -17,8 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,12 +31,12 @@ from api.models import (
     SignalResponse,
 )
 from backtest import (
-    SignalDatabase,
-    SignalRecord,
     BacktestRunner,
     MultiAssetPortfolio,
+    SignalDatabase,
+    SignalRecord,
 )
-from config.settings import settings, LLMProvider
+from config.settings import LLMProvider, settings
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +120,7 @@ def analyze(req: AnalysisRequest):
             memo = result.committee_memo
             signal = SignalRecord(
                 ticker=ticker,
-                signal_date=datetime.now(timezone.utc),
+                signal_date=datetime.now(UTC),
                 provider=req.provider,
                 model_name=req.model_name or "",
                 recommendation=memo.recommendation,
@@ -182,7 +181,7 @@ def analyze(req: AnalysisRequest):
 
 @app.get("/signals")
 def list_signals(
-    ticker: Optional[str] = Query(None),
+    ticker: str | None = Query(None),
     limit: int = Query(100, ge=1, le=10000),
 ):
     """List stored signals, optionally filtered by ticker."""
@@ -216,8 +215,8 @@ def get_signal(signal_id: int):
 
 @app.post("/backtest", response_model=BacktestResponse)
 def run_backtest(
-    ticker: Optional[str] = Query(None),
-    provider: Optional[str] = Query(None),
+    ticker: str | None = Query(None),
+    provider: str | None = Query(None),
     horizon: str = Query("return_20d"),
 ):
     """Run backtest on stored signals."""

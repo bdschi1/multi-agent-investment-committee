@@ -6,10 +6,10 @@ from agents/base.py — the foundation of small-LLM resilience (v3.4).
 """
 
 import json
+
 import pytest
 
-from agents.base import extract_json, clean_json_artifacts
-
+from agents.base import clean_json_artifacts, extract_json
 
 # ---------------------------------------------------------------------------
 # extract_json() tests
@@ -171,8 +171,8 @@ class TestParsingFailureDetection:
 
     def test_bull_case_sentinel(self):
         """Bull case fallback with sentinel is detected as degraded."""
-        from orchestrator.nodes import _is_parsing_degraded_bull
         from agents.base import BullCase
+        from orchestrator.nodes import _is_parsing_degraded_bull
 
         # Fallback bull case (as constructed in sector_analyst.py)
         bc = BullCase(
@@ -188,8 +188,8 @@ class TestParsingFailureDetection:
 
     def test_bull_case_normal(self):
         """Normal bull case is NOT detected as degraded."""
-        from orchestrator.nodes import _is_parsing_degraded_bull
         from agents.base import BullCase
+        from orchestrator.nodes import _is_parsing_degraded_bull
 
         bc = BullCase(
             ticker="TEST",
@@ -204,8 +204,8 @@ class TestParsingFailureDetection:
 
     def test_bear_case_sentinel(self):
         """Bear case fallback with sentinel is detected as degraded."""
-        from orchestrator.nodes import _is_parsing_degraded_bear
         from agents.base import BearCase
+        from orchestrator.nodes import _is_parsing_degraded_bear
 
         bc = BearCase(
             ticker="TEST",
@@ -220,8 +220,8 @@ class TestParsingFailureDetection:
 
     def test_macro_sentinel(self):
         """Macro view fallback with sentinel is detected as degraded."""
-        from orchestrator.nodes import _is_parsing_degraded_macro
         from agents.base import MacroView
+        from orchestrator.nodes import _is_parsing_degraded_macro
 
         mv = MacroView(
             ticker="TEST",
@@ -235,8 +235,8 @@ class TestParsingFailureDetection:
 
     def test_memo_sentinel(self):
         """Committee memo fallback with sentinel is detected as degraded."""
-        from orchestrator.nodes import _is_parsing_degraded_memo
         from agents.base import CommitteeMemo
+        from orchestrator.nodes import _is_parsing_degraded_memo
 
         memo = CommitteeMemo(
             ticker="TEST",

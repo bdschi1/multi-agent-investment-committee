@@ -10,13 +10,12 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-import pandas as pd
 
-from optimizer.models import OptimizationResult, OptimizerFallback
-from optimizer.views import build_views
-from optimizer.universe import build_universe, SECTOR_ETF_MAP
+from optimizer.analytics import compute_factor_betas, compute_mctr, compute_risk_ratios
 from optimizer.covariance import compute_covariance
-from optimizer.analytics import compute_risk_ratios, compute_factor_betas, compute_mctr
+from optimizer.models import OptimizationResult, OptimizerFallback
+from optimizer.universe import SECTOR_ETF_MAP, build_universe
+from optimizer.views import build_views
 
 logger = logging.getLogger(__name__)
 

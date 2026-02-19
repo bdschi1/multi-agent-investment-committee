@@ -8,12 +8,11 @@ import plotly.graph_objects as go
 import pytest
 
 from orchestrator.conviction_chart import (
-    build_conviction_probability,
-    build_conviction_trajectory,
     _find_inflection,
     _group_by_agent,
+    build_conviction_probability,
+    build_conviction_trajectory,
 )
-
 
 # ── Lightweight stand-in for ConvictionSnapshot (avoids importing full stack) ──
 

@@ -14,9 +14,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from tools.financial_metrics import FinancialMetricsTool
 from tools.market_data import MarketDataTool
 from tools.news_retrieval import NewsRetrievalTool
-from tools.financial_metrics import FinancialMetricsTool
 
 logger = logging.getLogger(__name__)
 

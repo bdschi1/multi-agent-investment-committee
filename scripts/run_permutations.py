@@ -4,8 +4,8 @@ Run the investment committee pipeline across multiple provider/ticker permutatio
 Outputs a summary report to ~/Desktop.
 """
 
-import sys
 import os
+import sys
 import time
 import traceback
 from datetime import datetime
@@ -13,11 +13,10 @@ from datetime import datetime
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config.settings import settings, LLMProvider
 from app import create_model
-from tools.data_aggregator import DataAggregator
+from config.settings import LLMProvider, settings
 from orchestrator.committee import InvestmentCommittee
-
+from tools.data_aggregator import DataAggregator
 
 # ── Permutations ─────────────────────────────────────────────────
 TICKERS = ["NVDA", "COST"]
@@ -77,7 +76,7 @@ def run_one(ticker: str, provider_info: dict) -> dict:
         context = DataAggregator.gather_context(ticker=ticker, user_context="")
 
         # Run committee
-        print(f"  Running committee pipeline...")
+        print("  Running committee pipeline...")
         committee = InvestmentCommittee(model=model)
         result = committee.run(
             ticker=ticker,
@@ -142,19 +141,19 @@ def format_report(results: list[dict]) -> str:
     total_time = sum(r["duration_s"] for r in results)
 
     lines = [
-        f"# IC Pipeline Permutation Report",
-        f"",
+        "# IC Pipeline Permutation Report",
+        "",
         f"**Date:** {now}",
         f"**Permutations:** {len(results)} ({len(TICKERS)} tickers x {len(PROVIDERS)} providers)",
         f"**Total runtime:** {total_time:.0f}s ({total_time/60:.1f} min)",
-        f"**Version:** v3.7.0",
-        f"",
-        f"---",
-        f"",
-        f"## Summary Table",
-        f"",
-        f"| Ticker | Provider | Status | Duration | Tokens | T Signal | Recommendation | Conviction |",
-        f"|--------|----------|--------|----------|--------|----------|----------------|------------|",
+        "**Version:** v3.7.0",
+        "",
+        "---",
+        "",
+        "## Summary Table",
+        "",
+        "| Ticker | Provider | Status | Duration | Tokens | T Signal | Recommendation | Conviction |",
+        "|--------|----------|--------|----------|--------|----------|----------------|------------|",
     ]
 
     for r in results:
@@ -169,35 +168,35 @@ def format_report(results: list[dict]) -> str:
         )
 
     lines += [
-        f"",
-        f"---",
-        f"",
-        f"## Detailed Results",
-        f"",
+        "",
+        "---",
+        "",
+        "## Detailed Results",
+        "",
     ]
 
     for r in results:
         lines.append(f"### {r['ticker']} — {r['provider']}")
-        lines.append(f"")
+        lines.append("")
 
         if r["status"] == "FAILED":
             lines.append(f"**Error:** `{r['error']}`")
-            lines.append(f"")
+            lines.append("")
             continue
 
-        lines.append(f"| Metric | Value |")
-        lines.append(f"|--------|-------|")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
         lines.append(f"| Model | `{r['model']}` |")
         lines.append(f"| Duration | {r['duration_s']}s |")
         lines.append(f"| Tokens | {r['tokens']:,} |")
         lines.append(f"| Recommendation | {r['recommendation'] or '—'} |")
-        lines.append(f"| PM Conviction | {r['conviction']}/10 |" if r['conviction'] is not None else f"| PM Conviction | — |")
-        lines.append(f"| T Signal | {r['t_signal']:+.3f} |" if r['t_signal'] is not None else f"| T Signal | — |")
+        lines.append(f"| PM Conviction | {r['conviction']}/10 |" if r['conviction'] is not None else "| PM Conviction | — |")
+        lines.append(f"| T Signal | {r['t_signal']:+.3f} |" if r['t_signal'] is not None else "| T Signal | — |")
         lines.append(f"| Position Direction | {r['position_direction'] or '—'} |")
-        lines.append(f"| Raw Confidence | {r['raw_confidence']:.2f} |" if r['raw_confidence'] is not None else f"| Raw Confidence | — |")
-        lines.append(f"| Bull Conviction | {r['bull_conviction']}/10 |" if r['bull_conviction'] is not None else f"| Bull Conviction | — |")
-        lines.append(f"| Bear Conviction | {r['bear_conviction']}/10 |" if r['bear_conviction'] is not None else f"| Bear Conviction | — |")
-        lines.append(f"| Macro Favorability | {r['macro_favorability']} |" if r['macro_favorability'] is not None else f"| Macro Favorability | — |")
+        lines.append(f"| Raw Confidence | {r['raw_confidence']:.2f} |" if r['raw_confidence'] is not None else "| Raw Confidence | — |")
+        lines.append(f"| Bull Conviction | {r['bull_conviction']}/10 |" if r['bull_conviction'] is not None else "| Bull Conviction | — |")
+        lines.append(f"| Bear Conviction | {r['bear_conviction']}/10 |" if r['bear_conviction'] is not None else "| Bear Conviction | — |")
+        lines.append(f"| Macro Favorability | {r['macro_favorability']} |" if r['macro_favorability'] is not None else "| Macro Favorability | — |")
 
         # Heuristic metrics
         if r['sharpe_heuristic'] is not None:
@@ -207,7 +206,7 @@ def format_report(results: list[dict]) -> str:
 
         # Optimizer
         if r['optimizer_success'] is True:
-            lines.append(f"| **BL Optimizer** | **Success** |")
+            lines.append("| **BL Optimizer** | **Success** |")
             if r['bl_optimal_weight'] is not None:
                 lines.append(f"| BL Optimal Weight | {r['bl_optimal_weight']:.1%} |")
             if r['bl_sharpe'] is not None:
@@ -215,18 +214,18 @@ def format_report(results: list[dict]) -> str:
             if r['bl_sortino'] is not None:
                 lines.append(f"| BL Sortino (computed) | {r['bl_sortino']:.2f} |")
         elif r['optimizer_success'] is False:
-            lines.append(f"| BL Optimizer | Fallback (graceful) |")
+            lines.append("| BL Optimizer | Fallback (graceful) |")
         else:
-            lines.append(f"| BL Optimizer | Not run |")
+            lines.append("| BL Optimizer | Not run |")
 
-        lines.append(f"")
+        lines.append("")
 
     # Cross-provider comparison
     lines += [
-        f"---",
-        f"",
-        f"## Cross-Provider Comparison",
-        f"",
+        "---",
+        "",
+        "## Cross-Provider Comparison",
+        "",
     ]
 
     for ticker in TICKERS:
@@ -234,9 +233,9 @@ def format_report(results: list[dict]) -> str:
         if not ticker_results:
             continue
         lines.append(f"### {ticker}")
-        lines.append(f"")
-        lines.append(f"| Metric | " + " | ".join(r["provider"] for r in ticker_results) + " |")
-        lines.append(f"|--------| " + " | ".join("---" for _ in ticker_results) + " |")
+        lines.append("")
+        lines.append("| Metric | " + " | ".join(r["provider"] for r in ticker_results) + " |")
+        lines.append("|--------| " + " | ".join("---" for _ in ticker_results) + " |")
 
         for metric, key, fmt in [
             ("T Signal", "t_signal", lambda v: f"{v:+.2f}" if v is not None else "—"),
@@ -249,7 +248,7 @@ def format_report(results: list[dict]) -> str:
         ]:
             vals = " | ".join(fmt(r[key]) for r in ticker_results)
             lines.append(f"| {metric} | {vals} |")
-        lines.append(f"")
+        lines.append("")
 
     return "\n".join(lines)
 

@@ -16,13 +16,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 
 from backtest import (
-    SignalDatabase,
     BacktestRunner,
     CalibrationAnalyzer,
     MultiAssetPortfolio,
+    SignalDatabase,
 )
 from backtest.alpha_decay import AlphaDecayAnalyzer
 from backtest.benchmark import BenchmarkAnalyzer

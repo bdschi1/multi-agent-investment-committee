@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import json
 
+from orchestrator.committee import CommitteeResult, InvestmentCommittee
 from orchestrator.graph import build_graph, run_graph
-from orchestrator.committee import InvestmentCommittee, CommitteeResult
 
 
 # Reuse the mock LLM from test_orchestrator

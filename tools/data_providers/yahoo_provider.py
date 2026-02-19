@@ -6,9 +6,12 @@ Includes helper functions used by bloomberg_provider and ib_provider.
 
 from bds_data_providers.yahoo_market import (
     YahooMarketProvider as YahooProvider,
+)
+from bds_data_providers.yahoo_market import (
     _format_large_number,
     _pct,
 )
+
 
 # Re-export is_available for factory compatibility
 def is_available() -> bool:

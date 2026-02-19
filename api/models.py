@@ -4,8 +4,7 @@ API request/response models for the FastAPI endpoint.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +17,7 @@ class AnalysisRequest(BaseModel):
         default="anthropic",
         description="LLM provider: anthropic, google, openai, deepseek, huggingface, ollama",
     )
-    model_name: Optional[str] = Field(
+    model_name: str | None = Field(
         default=None,
         description="Specific model name (overrides provider default)",
     )
@@ -51,13 +50,13 @@ class AnalysisResponse(BaseModel):
 
     success: bool = True
     error: str = ""
-    signal: Optional[SignalResponse] = None
-    signal_id: Optional[int] = None
-    bull_case: Optional[dict[str, Any]] = None
-    bear_case: Optional[dict[str, Any]] = None
-    macro_view: Optional[dict[str, Any]] = None
-    committee_memo: Optional[dict[str, Any]] = None
-    optimization_result: Optional[dict[str, Any]] = None
+    signal: SignalResponse | None = None
+    signal_id: int | None = None
+    bull_case: dict[str, Any] | None = None
+    bear_case: dict[str, Any] | None = None
+    macro_view: dict[str, Any] | None = None
+    committee_memo: dict[str, Any] | None = None
+    optimization_result: dict[str, Any] | None = None
     duration_s: float = 0.0
 
 

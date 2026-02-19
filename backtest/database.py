@@ -7,11 +7,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from backtest.models import SignalRecord, PortfolioSnapshot, BacktestResult
+from backtest.models import BacktestResult, PortfolioSnapshot, SignalRecord
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +108,7 @@ class SignalDatabase:
     def __init__(self, db_path: str | Path | None = None):
         self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._init_db()
 
     def _init_db(self) -> None:
@@ -183,7 +182,7 @@ class SignalDatabase:
             ).fetchall()
         return [self._row_to_signal(r) for r in rows]
 
-    def get_signal_by_id(self, signal_id: int) -> Optional[SignalRecord]:
+    def get_signal_by_id(self, signal_id: int) -> SignalRecord | None:
         conn = self._get_conn()
         row = conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
         return self._row_to_signal(row) if row else None

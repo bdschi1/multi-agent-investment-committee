@@ -7,12 +7,11 @@ BL integration, graceful fallback, analytics, and graph node integration.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
-
 
 # ---------------------------------------------------------------------------
 # Test numeric extraction (views.py)
@@ -397,7 +396,6 @@ class TestBlackLittermanIntegration:
 
     def test_result_fields_types(self, synthetic_universe):
         from optimizer.bl_optimizer import run_black_litterman
-        from optimizer.models import OptimizationResult
 
         tickers, prices, market_caps = synthetic_universe
 
@@ -438,8 +436,8 @@ class TestGraphIntegration:
     """The optimizer node should accept state dict and return optimization_result."""
 
     def test_node_returns_result(self):
-        from optimizer.node import run_optimizer
         from optimizer.models import OptimizerFallback
+        from optimizer.node import run_optimizer
 
         # Minimal state with no memo → should return fallback
         state = {
@@ -459,7 +457,6 @@ class TestGraphIntegration:
 
     def test_node_with_memo(self):
         from optimizer.node import run_optimizer
-        from optimizer.models import OptimizerFallback
 
         memo = MagicMock()
         memo.idio_return_estimate = "10%"

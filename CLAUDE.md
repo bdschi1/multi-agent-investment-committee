@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A multi-agent investment committee that runs four AI agents (Sector Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, debates bull/bear theses, and produces a structured committee memo with a T signal and Black-Litterman optimized portfolio weights.
+A multi-agent investment committee that runs four AI agents (Sector Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, preceded by an XAI pre-screen with Shapley value explanations, debates bull/bear theses, and produces a structured committee memo with a T signal and Black-Litterman optimized portfolio weights.
 
 ## Commands
 
@@ -18,8 +18,9 @@ cp .env.example .env  # then add API key(s)
 python app.py                    # Gradio UI at http://localhost:7860
 
 # Tests
-pytest tests/ -v                 # full suite (~260 tests)
+pytest tests/ -v                 # full suite (~358 tests)
 pytest tests/test_optimizer.py -v    # optimizer tests only
+pytest tests/test_xai.py -v         # XAI module tests
 pytest tests/test_temperature.py -v  # temperature routing tests only
 pytest tests/ -k "test_name"     # single test by name
 
@@ -38,7 +39,7 @@ ruff check --fix .
 ### Pipeline Flow (LangGraph StateGraph)
 
 ```
-gather_data → [sector_analyst, risk_manager, macro_analyst] (parallel)
+gather_data → run_xai_analysis → [sector_analyst, risk_manager, macro_analyst] (parallel)
            → adversarial_debate (conditional, up to N rounds)
            → portfolio_manager → optimizer → finalize
 ```
@@ -73,6 +74,21 @@ gather_data → [sector_analyst, risk_manager, macro_analyst] (parallel)
 - `covariance.py`: Ledoit-Wolf shrinkage via `pypfopt.CovarianceShrinkage`
 - `analytics.py`: Sharpe/Sortino, OLS factor betas, MCTR risk decomposition
 
+### XAI Package
+
+`xai/` is a self-contained explainable AI module:
+- `features.py`: Extracts 12 numeric features from fundamentals dict (handles % string parsing)
+- `distress.py`: AltmanZScoreModel (always available) + XGBoostDistressModel (optional artifact)
+- `shapley.py`: Built-in Shapley calculators — ExactLinearShapley (analytical for Z-Score) + PermutationShapley (sampling-based for any model)
+- `explainer.py`: SHAP wrapper that auto-falls back to built-in Shapley when `shap` not installed
+- `returns.py`: Distress screening + expected return computation (ER = (1-PFD) * earnings_yield)
+- `pipeline.py`: XAIPipeline orchestrates all 5 steps into XAIResult
+- `node.py`: LangGraph node (between gather_data and analyst fan-out)
+- `train.py`: Optional CLI for training XGBoost model on labeled data
+- `artifacts/`: Trained models (.gitignored)
+
+Based on: Sotic & Radovanovic (2024), "Explainable AI in Finance" (doi:10.20935/AcadAI8017)
+
 ### Data Providers
 
 `tools/data_providers/`: `BaseDataProvider` ABC → `YahooProvider` (default), `BloombergProvider`, `IBProvider`. Factory pattern via `get_provider()`.
@@ -105,7 +121,8 @@ gather_data → [sector_analyst, risk_manager, macro_analyst] (parallel)
 - Optimizer tests mock `build_universe()` with synthetic price data
 - Backtest tests use `tmp_path` fixture for temporary SQLite databases
 - Temperature tests verify kwarg passthrough and graceful fallback
-- Run `pytest tests/ -v` — expect ~310 passing, 1 pre-existing count mismatch in `test_tools_phase_b.py`
+- XAI tests use mock fundamentals dicts (no API keys needed), 2 XGBoost tests skip if xgboost not installed
+- Run `pytest tests/ -v` — expect ~358 passing, 2 skipped (xgboost optional)
 
 ## Settings
 

@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Multi-Agent Investment Committee API",
     description="Programmatic access to multi-agent IC analysis, signals, and analytics.",
-    version="3.8.0",
+    version="3.9.0",
 )
 
 app.add_middleware(
@@ -72,7 +72,7 @@ def health():
     """Health check with signal stats."""
     return HealthResponse(
         status="ok",
-        version="3.8.0",
+        version="3.9.0",
         num_signals=_db.count_signals(),
         num_tickers=len(_db.get_all_tickers()),
     )
@@ -143,6 +143,21 @@ def analyze(req: AnalysisRequest):
                     signal.bl_sharpe = opt.computed_sharpe
                     signal.bl_sortino = opt.computed_sortino
 
+            # Add XAI results if available
+            xai = result.xai_result
+            if xai and hasattr(xai, 'distress'):
+                signal.xai_pfd = xai.distress.pfd
+                signal.xai_z_score = xai.distress.z_score
+                signal.xai_distress_zone = xai.distress.distress_zone
+                signal.xai_expected_return = xai.returns.expected_return
+                signal.xai_model_used = xai.distress.model_used
+                if xai.distress.top_risk_factors:
+                    first_factor = xai.distress.top_risk_factors[0]
+                    if isinstance(first_factor, dict):
+                        signal.xai_top_risk_factor = next(iter(first_factor), "")
+                    else:
+                        signal.xai_top_risk_factor = str(first_factor)
+
             signal_id = _db.store_signal(signal)
 
         return AnalysisResponse(
@@ -170,6 +185,11 @@ def analyze(req: AnalysisRequest):
                 result.optimization_result.model_dump()
                 if result.optimization_result and hasattr(result.optimization_result, 'model_dump')
                 else None
+            ),
+            xai_analysis=(
+                result.xai_result.model_dump()
+                if result.xai_result and hasattr(result.xai_result, 'model_dump')
+                else result.xai_result if isinstance(result.xai_result, dict) else None
             ),
             duration_s=duration_s,
         )

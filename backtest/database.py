@@ -47,7 +47,13 @@ CREATE TABLE IF NOT EXISTS signals (
     bull_influence REAL,
     bear_influence REAL,
     macro_influence REAL,
-    debate_shift REAL
+    debate_shift REAL,
+    xai_pfd REAL,
+    xai_z_score REAL,
+    xai_distress_zone TEXT DEFAULT '',
+    xai_expected_return REAL,
+    xai_top_risk_factor TEXT DEFAULT '',
+    xai_model_used TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
@@ -115,6 +121,27 @@ class SignalDatabase:
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
         conn.commit()
+        self._migrate_xai_columns(conn)
+
+    def _migrate_xai_columns(self, conn: sqlite3.Connection) -> None:
+        """Add XAI columns to existing signals table if missing."""
+        xai_columns = [
+            ("xai_pfd", "REAL"),
+            ("xai_z_score", "REAL"),
+            ("xai_distress_zone", "TEXT DEFAULT ''"),
+            ("xai_expected_return", "REAL"),
+            ("xai_top_risk_factor", "TEXT DEFAULT ''"),
+            ("xai_model_used", "TEXT DEFAULT ''"),
+        ]
+        try:
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(signals)").fetchall()}
+            for col_name, col_type in xai_columns:
+                if col_name not in existing:
+                    conn.execute(f"ALTER TABLE signals ADD COLUMN {col_name} {col_type}")
+                    logger.debug("Migrated signals table: added column %s", col_name)
+            conn.commit()
+        except Exception:
+            logger.debug("XAI column migration skipped", exc_info=True)
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -141,8 +168,10 @@ class SignalDatabase:
                 sharpe_heuristic, sortino_heuristic, price_at_signal,
                 return_1d, return_5d, return_10d, return_20d, return_60d,
                 duration_s, total_tokens,
-                bull_influence, bear_influence, macro_influence, debate_shift
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                bull_influence, bear_influence, macro_influence, debate_shift,
+                xai_pfd, xai_z_score, xai_distress_zone,
+                xai_expected_return, xai_top_risk_factor, xai_model_used
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 signal.ticker, signal.signal_date.isoformat(),
                 signal.provider, signal.model_name,
@@ -158,6 +187,9 @@ class SignalDatabase:
                 signal.duration_s, signal.total_tokens,
                 signal.bull_influence, signal.bear_influence,
                 signal.macro_influence, signal.debate_shift,
+                signal.xai_pfd, signal.xai_z_score, signal.xai_distress_zone,
+                signal.xai_expected_return, signal.xai_top_risk_factor,
+                signal.xai_model_used,
             ),
         )
         conn.commit()
@@ -309,6 +341,12 @@ class SignalDatabase:
             bear_influence=row["bear_influence"],
             macro_influence=row["macro_influence"],
             debate_shift=row["debate_shift"],
+            xai_pfd=row["xai_pfd"],
+            xai_z_score=row["xai_z_score"],
+            xai_distress_zone=row["xai_distress_zone"] or "",
+            xai_expected_return=row["xai_expected_return"],
+            xai_top_risk_factor=row["xai_top_risk_factor"] or "",
+            xai_model_used=row["xai_model_used"] or "",
         )
 
     @staticmethod

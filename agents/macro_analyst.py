@@ -199,6 +199,17 @@ ADDITIONAL DATA FROM TOOL CALLS (use this for macro context):
 {json.dumps(tool_results, indent=2, default=str)}
 """
 
+        # XAI pre-screen context (quantitative)
+        xai_section = ""
+        xai_data = context.get("xai_analysis", {})
+        if xai_data:
+            narrative = xai_data.get("narrative", "") if isinstance(xai_data, dict) else getattr(xai_data, "narrative", "")
+            if narrative:
+                xai_section = f"""
+XAI QUANTITATIVE PRE-SCREEN (company financial health context for macro assessment):
+{narrative}
+"""
+
         prompt = f"""You are executing your macro analysis AND portfolio strategy assessment for {ticker}.
 Provide the TOP-DOWN CONTEXT + PORTFOLIO GUARDRAILS.
 
@@ -208,7 +219,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{kb_section}{tool_data_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}
 Produce a STRUCTURED macro view + portfolio strategy. This is context and guardrails — not a buy/sell recommendation.
 
 Respond in valid JSON matching this exact schema:

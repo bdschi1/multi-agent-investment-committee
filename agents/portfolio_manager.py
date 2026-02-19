@@ -253,6 +253,25 @@ ADDITIONAL DATA FROM TOOL CALLS (factor into your synthesis):
 {json.dumps(tool_results, indent=2, default=str)}
 """
 
+        # XAI pre-screen context (quantitative) — PM gets full detail
+        xai_section = ""
+        xai_data = context.get("xai_analysis", {})
+        if xai_data:
+            narrative = xai_data.get("narrative", "") if isinstance(xai_data, dict) else getattr(xai_data, "narrative", "")
+            returns_data = xai_data.get("returns", {}) if isinstance(xai_data, dict) else {}
+            er = returns_data.get("expected_return_pct", "") if isinstance(returns_data, dict) else ""
+            distress = xai_data.get("distress", {}) if isinstance(xai_data, dict) else {}
+            pfd = distress.get("pfd", None) if isinstance(distress, dict) else None
+            zone = distress.get("distress_zone", "") if isinstance(distress, dict) else ""
+            if narrative:
+                xai_detail = f"\n{narrative}"
+                if pfd is not None:
+                    xai_detail += f"\nQuantitative: PFD={pfd:.1%}, Zone={zone}, XAI Expected Return={er}"
+                xai_section = f"""
+XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — factor into sizing and conviction):
+{xai_detail}
+"""
+
         # Phase C: PM guidance from HITL review step
         pm_guidance = context.get('pm_guidance', '').strip()
         guidance_section = ""
@@ -283,7 +302,7 @@ BULL CASE: {json.dumps(bull_data, indent=2, default=str)}
 BEAR CASE: {json.dumps(bear_data, indent=2, default=str)}
 MACRO ENVIRONMENT: {json.dumps(macro_data, indent=2, default=str)}
 DEBATE: {json.dumps(debate, indent=2, default=str)}
-{expert_section}{kb_section}{tool_data_section}{guidance_section}{memory_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}{guidance_section}{memory_section}
 IMPORTANT: Factor in the macro environment. Consider:
 - Does the economic cycle favor or hinder this stock?
 - Does the rate trajectory support or pressure the thesis?

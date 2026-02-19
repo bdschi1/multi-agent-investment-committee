@@ -21,6 +21,9 @@ offload_temp/
 *.safetensors
 *.gguf
 
+# ── XAI trained model artifacts ─────────────────────────────────
+xai/artifacts/*.joblib
+
 # ── Hugging Face cache ──────────────────────────────────────────
 hf_cache/
 

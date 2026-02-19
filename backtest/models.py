@@ -55,6 +55,14 @@ class SignalRecord(BaseModel):
     macro_influence: float | None = None
     debate_shift: float | None = None
 
+    # XAI outputs
+    xai_pfd: float | None = None
+    xai_z_score: float | None = None
+    xai_distress_zone: str = ""
+    xai_expected_return: float | None = None
+    xai_top_risk_factor: str = ""
+    xai_model_used: str = ""
+
 
 class PortfolioSnapshot(BaseModel):
     """Point-in-time snapshot of the paper portfolio."""

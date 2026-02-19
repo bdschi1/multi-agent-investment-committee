@@ -464,6 +464,21 @@ def _persist_signal(result: CommitteeResult, provider_name: str, model_name: str
                 signal.bl_sharpe = opt.computed_sharpe
                 signal.bl_sortino = opt.computed_sortino
 
+        # Add XAI results if available
+        xai = result.xai_result
+        if xai and hasattr(xai, 'distress'):
+            signal.xai_pfd = xai.distress.pfd
+            signal.xai_z_score = xai.distress.z_score
+            signal.xai_distress_zone = xai.distress.distress_zone
+            signal.xai_expected_return = xai.returns.expected_return
+            signal.xai_model_used = xai.distress.model_used
+            if xai.distress.top_risk_factors:
+                first_factor = xai.distress.top_risk_factors[0]
+                if isinstance(first_factor, dict):
+                    signal.xai_top_risk_factor = next(iter(first_factor), "")
+                else:
+                    signal.xai_top_risk_factor = str(first_factor)
+
         signal_id = db.store_signal(signal)
         db.close()
         logger.info(f"Signal persisted: {result.ticker} → id={signal_id}")
@@ -519,16 +534,16 @@ def run_committee_analysis(
     model_choice: str = "",
     uploaded_files: list | None = None,
     progress: gr.Progress = gr.Progress(),
-) -> tuple[str, str, str, str, str, str, str, str, str]:
+) -> tuple[str, str, str, str, str, str, str, str, str, str]:
     """
     Run the full investment committee analysis.
 
-    Returns formatted outputs for each Gradio tab (8 markdown tabs + 1 file).
+    Returns formatted outputs for each Gradio tab (9 markdown tabs + 2 plots + 1 file).
     """
     if not ticker or not ticker.strip():
         return (
             "Please enter a ticker symbol.",
-            "", "", "", "", "", "", "", None
+            "", "", "", "", "", "", "", None, None, "", None
         )
 
     ticker = ticker.strip().upper()
@@ -543,7 +558,7 @@ def run_committee_analysis(
             "takes you somewhere unexpected.\n\n"
             '*"What a long strange trip it\'s been."*'
         )
-        return (_ripple, "", "", "", "", "", "", "", None)
+        return (_ripple, "", "", "", "", "", "", "", None, None, "", None)
 
     status_messages = []
 
@@ -628,6 +643,7 @@ def run_committee_analysis(
         bull_md = _format_bull_case(result)
         bear_md = _format_bear_case(result)
         macro_md = _format_macro_view(result)
+        xai_md = _format_xai_analysis(result)
         debate_md = _format_debate(result)
         conviction_md = _format_conviction_evolution(result)
         trajectory_fig = build_conviction_trajectory(
@@ -650,7 +666,7 @@ def run_committee_analysis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return (memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+        return (memo_md, bull_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
                 trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
@@ -661,7 +677,7 @@ def run_committee_analysis(
             f"**Error:** {str(e)}\n\n"
             f"Check that your API key is set in `.env` and the provider is available."
         )
-        return error_msg, "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
     finally:
         # Restore original debate rounds
         settings.max_debate_rounds = original_rounds
@@ -792,7 +808,7 @@ def run_phase2_synthesis(
     if intermediate_state is None:
         return (
             "No Phase 1 results available. Run Phase 1 first.",
-            "", "", "", "", "", None, None, "", "", None
+            "", "", "", "", "", "", None, None, "", "", None
         )
 
     status_messages = []
@@ -847,6 +863,7 @@ def run_phase2_synthesis(
         bull_md = _format_bull_case(result)
         bear_md = _format_bear_case(result)
         macro_md = _format_macro_view(result)
+        xai_md = _format_xai_analysis(result)
         debate_md = _format_debate(result)
         conviction_md = _format_conviction_evolution(result)
         trajectory_fig = build_conviction_trajectory(
@@ -867,13 +884,13 @@ def run_phase2_synthesis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return (memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+        return (memo_md, bull_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
                 trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
         logger.exception("Phase 2 failed")
         error_msg = f"## Error\n\n**Error:** {str(e)}"
-        return error_msg, "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
 
 
 # ---------------------------------------------------------------------------
@@ -2325,6 +2342,174 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
     return "\n".join(lines)
 
 
+def _format_xai_analysis(result: CommitteeResult) -> str:
+    """Format the XAI pre-screen analysis as markdown."""
+    xai = result.xai_result
+    if not xai:
+        return "*XAI pre-screen not available for this run.*"
+
+    # Handle both Pydantic model and raw dict
+    if isinstance(xai, dict):
+        ticker = xai.get("ticker", "")
+        narrative = xai.get("narrative", "")
+        comp_time = xai.get("computation_time_ms", 0)
+        features = xai.get("features_used", {})
+        ranking = xai.get("feature_importance_ranking", [])
+        distress = xai.get("distress", {})
+        returns = xai.get("returns", {})
+    else:
+        ticker = xai.ticker
+        narrative = xai.narrative
+        comp_time = xai.computation_time_ms
+        features = xai.features_used
+        ranking = xai.feature_importance_ranking
+        distress = xai.distress if hasattr(xai, 'distress') else {}
+        returns = xai.returns if hasattr(xai, 'returns') else {}
+
+    # Distress data
+    if isinstance(distress, dict):
+        pfd = distress.get("pfd", 0)
+        z_score = distress.get("z_score")
+        zone = distress.get("distress_zone", "")
+        model_used = distress.get("model_used", "")
+        top_risk = distress.get("top_risk_factors", [])
+    else:
+        pfd = distress.pfd
+        z_score = distress.z_score
+        zone = distress.distress_zone
+        model_used = distress.model_used
+        top_risk = distress.top_risk_factors
+
+    # Returns data
+    if isinstance(returns, dict):
+        is_distressed = returns.get("is_distressed", False)
+        distress_flag = returns.get("distress_flag", "")
+        er = returns.get("expected_return", 0)
+        er_pct = returns.get("expected_return_pct", "")
+        ey_proxy = returns.get("earnings_yield_proxy", 0)
+        top_return = returns.get("top_return_factors", [])
+    else:
+        is_distressed = returns.is_distressed
+        distress_flag = returns.distress_flag
+        er = returns.expected_return
+        er_pct = returns.expected_return_pct
+        ey_proxy = returns.earnings_yield_proxy
+        top_return = returns.top_return_factors
+
+    # Zone styling
+    zone_emoji = {"safe": "🟢", "grey": "🟡", "distress": "🔴"}.get(zone, "⚪")
+
+    lines = [
+        f"# XAI Pre-Screen: {ticker}",
+        "",
+        f"*Explainable AI analysis using Shapley values — computed in {comp_time:.0f}ms*",
+        "",
+        "---",
+        "",
+        "## Distress Assessment",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| **Probability of Financial Distress (PFD)** | {pfd:.1%} |",
+    ]
+    if z_score is not None:
+        lines.append(f"| **Altman Z-Score** | {z_score:.2f} |")
+    lines.extend([
+        f"| **Distress Zone** | {zone_emoji} **{zone.upper()}** |",
+        f"| **Model Used** | {model_used} |",
+        f"| **Screening Result** | {distress_flag} |",
+        "",
+    ])
+
+    # Top risk factors
+    if top_risk:
+        lines.extend([
+            "### Top Risk Factors (SHAP)",
+            "",
+            "| Feature | SHAP Contribution |",
+            "|---------|-------------------|",
+        ])
+        for factor in top_risk[:5]:
+            if isinstance(factor, dict):
+                for fname, fval in factor.items():
+                    direction = "+" if fval > 0 else ""
+                    lines.append(f"| {fname} | {direction}{fval:.4f} |")
+            else:
+                lines.append(f"| {factor} | — |")
+        lines.append("")
+
+    # Expected return
+    lines.extend([
+        "## Expected Return (Risk-Adjusted)",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| **Expected Return** | **{er_pct}** |",
+        f"| **Earnings Yield Proxy** | {ey_proxy:.4f} |",
+        f"| **Formula** | ER = (1 - PFD) x Earnings Yield |",
+        f"| **Distressed?** | {'Yes' if is_distressed else 'No'} |",
+        "",
+    ])
+
+    # Top return drivers
+    if top_return:
+        lines.extend([
+            "### Top Return Drivers (SHAP)",
+            "",
+            "| Feature | SHAP Contribution |",
+            "|---------|-------------------|",
+        ])
+        for factor in top_return[:5]:
+            if isinstance(factor, dict):
+                for fname, fval in factor.items():
+                    direction = "+" if fval > 0 else ""
+                    lines.append(f"| {fname} | {direction}{fval:.4f} |")
+            else:
+                lines.append(f"| {factor} | — |")
+        lines.append("")
+
+    # Feature importance ranking
+    if ranking:
+        lines.extend([
+            "## Feature Importance Ranking",
+            "",
+            "| Rank | Feature |",
+            "|------|---------|",
+        ])
+        for i, feat in enumerate(ranking[:10], 1):
+            lines.append(f"| {i} | {feat} |")
+        lines.append("")
+
+    # Features used
+    if features:
+        lines.extend([
+            "## Features Extracted",
+            "",
+            "| Feature | Value |",
+            "|---------|-------|",
+        ])
+        for fname, fval in features.items():
+            lines.append(f"| {fname} | {fval:.4f} |")
+        lines.append("")
+
+    # Narrative summary
+    if narrative:
+        lines.extend([
+            "## Narrative Summary",
+            "",
+            narrative,
+            "",
+        ])
+
+    lines.extend([
+        "---",
+        "*Based on: Sotic & Radovanovic (2024), \"Explainable AI in Finance\" "
+        "(doi:10.20935/AcadAI8017)*",
+    ])
+
+    return "\n".join(lines)
+
+
 def _format_status(result: CommitteeResult, messages: list[str], provider_name: str = "") -> str:
     """Format the status/summary view with tables."""
     stats = TraceRenderer.summary_stats(result.traces)
@@ -2549,6 +2734,9 @@ def build_ui() -> gr.Blocks:
             with gr.TabItem("Macro View"):
                 macro_output = gr.Markdown(label="Macro Analyst — Top-Down Environment")
 
+            with gr.TabItem("XAI Pre-Screen"):
+                xai_output = gr.Markdown(label="Explainable AI — Quantitative Pre-Screen")
+
             with gr.TabItem("Debate"):
                 debate_output = gr.Markdown(label="Adversarial Debate Transcript")
 
@@ -2640,9 +2828,10 @@ def build_ui() -> gr.Blocks:
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input,
                     model_dropdown, file_upload],
-            outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
-                     conviction_output, conviction_trajectory_plot, conviction_probability_plot,
-                     trace_output, status_output, report_path_state],
+            outputs=[memo_output, bull_output, bear_output, macro_output, xai_output,
+                     debate_output, conviction_output, conviction_trajectory_plot,
+                     conviction_probability_plot, trace_output, status_output,
+                     report_path_state],
             show_progress="hidden",
         ).then(
             fn=lambda: "",
@@ -2716,10 +2905,10 @@ def build_ui() -> gr.Blocks:
         ).then(
             fn=handle_phase2,
             inputs=[intermediate_state, pm_guidance_input, provider_dropdown, model_dropdown],
-            outputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
-                     conviction_output, conviction_trajectory_plot, conviction_probability_plot,
-                     trace_output, status_output, report_path_state,
-                     review_accordion],
+            outputs=[memo_output, bull_output, bear_output, macro_output, xai_output,
+                     debate_output, conviction_output, conviction_trajectory_plot,
+                     conviction_probability_plot, trace_output, status_output,
+                     report_path_state, review_accordion],
             show_progress="hidden",
         ).then(
             fn=lambda: "",
@@ -2733,16 +2922,16 @@ def build_ui() -> gr.Blocks:
 
         # ── Copy button ──
         def show_report_for_copy(*tab_outputs):
-            memo, bull, bear, macro, debate, conviction, trace, status = tab_outputs
+            memo, bull, bear, macro, xai, debate, conviction, trace, status = tab_outputs
             full = "\n\n---\n\n".join([
-                s for s in [memo, bull, bear, macro, debate, conviction, status] if s
+                s for s in [memo, bull, bear, macro, xai, debate, conviction, status] if s
             ])
             return gr.update(value=full, visible=True)
 
         copy_btn.click(
             fn=show_report_for_copy,
-            inputs=[memo_output, bull_output, bear_output, macro_output, debate_output,
-                    conviction_output, trace_output, status_output],
+            inputs=[memo_output, bull_output, bear_output, macro_output, xai_output,
+                    debate_output, conviction_output, trace_output, status_output],
             outputs=[copy_output],
         )
 

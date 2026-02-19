@@ -7,22 +7,22 @@ but now with conditional edges (debate loop) and parallel fan-out
 via Send.  Debate always runs (convergence is noted, not skipped).
 
 Graph topology (full pipeline):
-    START → gather_data → [Send 3 analysts] → report_phase1
-                                                    │
-                                            run_debate_round ◄──┐
-                                                │                │
-                                         [debate_done?]          │
-                                         /           \\          │
-                                    done          continue ──────┘
-                                       │
-                                report_debate_complete
-                                       │
-                                run_portfolio_manager
-                                       │
-                                   finalize → END
+    START → gather_data → run_xai_analysis → [Send 3 analysts] → report_phase1
+                                                                       │
+                                                               run_debate_round ◄──┐
+                                                                   │                │
+                                                            [debate_done?]          │
+                                                            /           \\          │
+                                                       done          continue ──────┘
+                                                          │
+                                                   report_debate_complete
+                                                          │
+                                                   run_portfolio_manager
+                                                          │
+                                                      finalize → END
 
 Phase C: Two-phase execution (HITL)
-    Phase 1 graph: START → ... → report_debate_complete → END
+    Phase 1 graph: START → gather_data → run_xai_analysis → ... → report_debate_complete → END
     Phase 2 graph: START → run_portfolio_manager → finalize → END
 """
 
@@ -39,6 +39,7 @@ from optimizer.node import run_optimizer
 from orchestrator import nodes
 from orchestrator.committee import CommitteeResult
 from orchestrator.state import CommitteeState
+from xai.node import run_xai_analysis
 
 # ---------------------------------------------------------------------------
 # Routing functions (conditional edges)
@@ -89,6 +90,7 @@ def build_graph() -> Any:
 
     # ── Add all nodes ──
     graph.add_node("gather_data", nodes.gather_data)
+    graph.add_node("run_xai_analysis", run_xai_analysis)
     graph.add_node("run_sector_analyst", nodes.run_sector_analyst)
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
@@ -103,9 +105,12 @@ def build_graph() -> Any:
     # ── Entry ──
     graph.add_edge(START, "gather_data")
 
+    # ── XAI pre-screen between gather_data and analysts ──
+    graph.add_edge("gather_data", "run_xai_analysis")
+
     # ── Fan-out to 3 parallel analysts ──
     graph.add_conditional_edges(
-        "gather_data",
+        "run_xai_analysis",
         _fan_out_analysts,
         ["run_sector_analyst", "run_risk_manager", "run_macro_analyst"],
     )
@@ -165,6 +170,7 @@ def build_graph_phase1() -> Any:
 
     # Same nodes as full graph minus PM and finalize
     graph.add_node("gather_data", nodes.gather_data)
+    graph.add_node("run_xai_analysis", run_xai_analysis)
     graph.add_node("run_sector_analyst", nodes.run_sector_analyst)
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
@@ -176,9 +182,12 @@ def build_graph_phase1() -> Any:
     # ── Entry ──
     graph.add_edge(START, "gather_data")
 
+    # ── XAI pre-screen between gather_data and analysts ──
+    graph.add_edge("gather_data", "run_xai_analysis")
+
     # ── Fan-out to 3 parallel analysts ──
     graph.add_conditional_edges(
-        "gather_data",
+        "run_xai_analysis",
         _fan_out_analysts,
         ["run_sector_analyst", "run_risk_manager", "run_macro_analyst"],
     )
@@ -246,6 +255,21 @@ def build_graph_phase2() -> Any:
 
 def _state_to_result(state: dict) -> CommitteeResult:
     """Convert final graph state to CommitteeResult for backward compat."""
+    # Extract XAI result from nested context if available
+    xai_result = None
+    context = state.get("context", {})
+    if isinstance(context, dict):
+        xai_data = context.get("xai_analysis")
+        if xai_data:
+            try:
+                from xai.models import XAIResult
+                if isinstance(xai_data, dict):
+                    xai_result = XAIResult(**xai_data)
+                elif hasattr(xai_data, 'model_dump'):
+                    xai_result = xai_data
+            except Exception:
+                xai_result = xai_data  # Store raw dict as fallback
+
     return CommitteeResult(
         ticker=state.get("ticker", ""),
         bull_case=state.get("bull_case"),
@@ -255,6 +279,7 @@ def _state_to_result(state: dict) -> CommitteeResult:
         risk_rebuttal=state.get("risk_rebuttal"),
         committee_memo=state.get("committee_memo"),
         optimization_result=state.get("optimization_result"),
+        xai_result=xai_result,
         traces=state.get("traces", {}),
         conviction_timeline=state.get("conviction_timeline", []),
         parsing_failures=state.get("parsing_failures", []),

@@ -585,6 +585,7 @@ def run_portfolio_manager(state: dict, config: RunnableConfig) -> dict:
         "user_context": state.get("context", {}).get("user_context", ""),
         "pm_guidance": state.get("pm_guidance", ""),
         "prior_analyses": prior_analyses,
+        "xai_analysis": state.get("context", {}).get("xai_analysis"),
     }
 
     pm_result = pm.run(state["ticker"], pm_context)

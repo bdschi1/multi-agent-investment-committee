@@ -128,6 +128,17 @@ class Settings(BaseSettings):
         description="Enable two-phase human-in-the-loop mode in UI (review before PM synthesis)",
     )
 
+    # --- XAI Module ---
+    enable_xai: bool = Field(default=True, description="Enable XAI pre-screen analysis in pipeline")
+    xai_distress_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="PFD threshold for distress classification",
+    )
+    xai_model_path: str = Field(
+        default="xai/artifacts/distress_model.joblib",
+        description="Path to trained XGBoost distress model (optional)",
+    )
+
     def get_active_model(self) -> str:
         """Return the model identifier for the active provider."""
         model_map = {

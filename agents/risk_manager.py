@@ -172,6 +172,23 @@ ADDITIONAL DATA FROM TOOL CALLS (use this to strengthen your risk analysis):
 {json.dumps(tool_results, indent=2, default=str)}
 """
 
+        # XAI pre-screen context (quantitative)
+        xai_section = ""
+        xai_data = context.get("xai_analysis", {})
+        if xai_data:
+            narrative = xai_data.get("narrative", "") if isinstance(xai_data, dict) else getattr(xai_data, "narrative", "")
+            distress = xai_data.get("distress", {}) if isinstance(xai_data, dict) else {}
+            pfd = distress.get("pfd", None) if isinstance(distress, dict) else None
+            zone = distress.get("distress_zone", "") if isinstance(distress, dict) else ""
+            if narrative:
+                pfd_warning = ""
+                if pfd is not None and pfd > 0.3:
+                    pfd_warning = f"\n⚠️ ELEVATED DISTRESS PROBABILITY: PFD={pfd:.1%}, zone={zone}. Investigate financial health risks."
+                xai_section = f"""
+XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — use for risk identification):
+{narrative}{pfd_warning}
+"""
+
         prompt = f"""You are executing your risk analysis for {ticker}. BUILD THE BEAR CASE.
 
 Your analysis plan:
@@ -180,7 +197,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{kb_section}{tool_data_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}
 Produce a STRUCTURED bear case. Think in CAUSAL CHAINS for 2nd/3rd order effects.
 
 IMPORTANT: Your output should NOT default to "avoid/no position." If the data supports it,

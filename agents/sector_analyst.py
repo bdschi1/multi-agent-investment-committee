@@ -173,6 +173,17 @@ ADDITIONAL DATA FROM TOOL CALLS (use this to strengthen your analysis):
 {json.dumps(tool_results, indent=2, default=str)}
 """
 
+        # XAI pre-screen context (quantitative)
+        xai_section = ""
+        xai_data = context.get("xai_analysis", {})
+        if xai_data:
+            narrative = xai_data.get("narrative", "") if isinstance(xai_data, dict) else getattr(xai_data, "narrative", "")
+            if narrative:
+                xai_section = f"""
+XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — factor this into your thesis):
+{narrative}
+"""
+
         prompt = f"""You are executing your analysis plan for {ticker}. BUILD THE BULL CASE.
 
 Your plan:
@@ -182,7 +193,7 @@ Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
 {kb_section}
-{expert_section}{tool_data_section}
+{expert_section}{tool_data_section}{xai_section}
 Produce a STRUCTURED bull case. Include:
 1. Technical analysis: recent price action, trend, momentum, key support/resistance levels
 2. Relative performance: how has this stock performed vs. its sector and the broader market recently?

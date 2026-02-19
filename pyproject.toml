@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "multi-agent-investment-committee"
-version = "3.8.0"
-description = "Multi-agent investment committee with structured reasoning, adversarial debate, Black-Litterman optimizer, backtesting, FastAPI, and RL-ready T signal"
+version = "3.9.0"
+description = "Multi-agent investment committee with structured reasoning, adversarial debate, XAI pre-screen (Shapley values), Black-Litterman optimizer, backtesting, FastAPI, and RL-ready T signal"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -86,6 +86,11 @@ kb = [
     "tiktoken>=0.7.0",
     "sentence-transformers>=3.0",
 ]
+xai = [
+    "xgboost>=2.0.0",
+    "shap>=0.44.0",
+    "matplotlib>=3.7.0",
+]
 all = [
     "openai>=1.50.0",
     "ollama>=0.4.0",
@@ -94,10 +99,13 @@ all = [
     "pypdf>=4.0.0",
     "python-docx>=1.0.0",
     "tiktoken>=0.7.0",
+    "xgboost>=2.0.0",
+    "shap>=0.44.0",
+    "matplotlib>=3.7.0",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["agents", "orchestrator", "tools", "config", "evals", "optimizer", "backtest", "api"]
+packages = ["agents", "orchestrator", "tools", "config", "evals", "optimizer", "backtest", "api", "xai"]
 
 [tool.ruff]
 target-version = "py311"

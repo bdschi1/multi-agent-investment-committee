@@ -16,14 +16,16 @@ tags:
   - langgraph
   - reinforcement-learning
   - black-litterman
+  - explainable-ai
+  - shapley-values
 ---
 
 # Multi-Agent Investment Committee
 
-Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — validated by a real Black-Litterman portfolio optimizer.
+Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — preceded by an XAI pre-screen with Shapley value explanations and validated by a real Black-Litterman portfolio optimizer.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-310%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
@@ -32,20 +34,22 @@ Four AI agents analyze a ticker in parallel, debate each other's theses, and pro
 
 ## How It Works
 
-The pipeline runs in five phases:
+The pipeline runs in six phases:
 
-1. **Parallel Analysis** -- Three agents analyze the same ticker simultaneously:
+1. **XAI Pre-Screen** -- Before any LLM calls, a quantitative pre-screen estimates the Probability of Financial Distress (PFD) using an Altman Z-Score model (or optional trained XGBoost), computes risk-adjusted expected return, and identifies the top risk/return drivers via Shapley value decomposition. This creates **dual explainability**: feature-level Shapley (quantitative) + agent-level attribution (qualitative).
+
+2. **Parallel Analysis** -- Three agents analyze the same ticker simultaneously, with XAI context injected:
    - **Sector Analyst** (bull case) -- sentiment extraction, return decomposition, catalyst identification
    - **Risk Manager** (bear case) -- causal chain reasoning (1st/2nd/3rd order effects), alpha challenge
    - **Macro Strategist** (top-down) -- vol regime classification, net exposure, sizing frameworks
 
-2. **Adversarial Debate** -- Bull and bear challenge each other through structured rebuttals. Convictions update based on evidence.
+3. **Adversarial Debate** -- Bull and bear challenge each other through structured rebuttals. Convictions update based on evidence.
 
-3. **PM Synthesis** -- Portfolio Manager weighs all evidence, applies sizing heuristics, produces a committee memo with recommendation and T signal.
+4. **PM Synthesis** -- Portfolio Manager weighs all evidence, applies sizing heuristics, produces a committee memo with recommendation and T signal.
 
-4. **Portfolio Optimization** -- Black-Litterman optimizer takes the PM's conviction as a view, computes actual covariance/weights/risk metrics, and displays computed values alongside the LLM heuristics.
+5. **Portfolio Optimization** -- Black-Litterman optimizer takes the PM's conviction as a view, computes actual covariance/weights/risk metrics, and displays computed values alongside the LLM heuristics.
 
-5. **Signal Persistence + Analytics** -- Every signal is stored in SQLite for historical backtesting, calibration analysis, alpha decay measurement, benchmark comparison, and multi-asset portfolio construction.
+6. **Signal Persistence + Analytics** -- Every signal is stored in SQLite for historical backtesting, calibration analysis, alpha decay measurement, benchmark comparison, and multi-asset portfolio construction.
 
 ```
 User Input (ticker + guidance + docs)
@@ -53,9 +57,12 @@ User Input (ticker + guidance + docs)
        v
   Data Gathering (yfinance, RSS, derived metrics, uploaded docs)
        |
+       v
+  XAI Pre-Screen (PFD, Shapley values, expected return)
+       |
    +---+---+--------+
    v   v            v
- Sector  Risk     Macro
+ Sector  Risk     Macro         (XAI context injected)
 Analyst Manager  Strategist
    |      |          |
    v      v          |
@@ -104,6 +111,31 @@ After the PM produces its qualitative sizing heuristics, the `optimizer/` packag
 6. **Analytics** -- computed Sharpe/Sortino, OLS factor betas with t-stats, marginal contribution to risk (MCTR)
 
 The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
+
+---
+
+## Explainable AI (XAI) Pre-Screen
+
+The `xai/` package implements a five-step explainable AI procedure that runs before the LLM agents, giving them quantitative context. Inspired by Sotic & Radovanovic (2024), "Explainable AI in Finance" ([doi:10.20935/AcadAI8017](https://doi.org/10.20935/AcadAI8017)), which proposes combining XGBoost prediction with SHAP explanations for investment decision-making.
+
+| Step | What | Method |
+|------|------|--------|
+| 1 | **PFD Estimation** | Altman Z-Score (zero-config) or trained XGBoost |
+| 2 | **Risk Factor Identification** | Shapley value decomposition of distress drivers |
+| 3 | **Distress Screening** | PFD threshold flag (configurable, default 50%) |
+| 4 | **Expected Return** | ER = (1 - PFD) x earnings yield proxy |
+| 5 | **Return Driver Analysis** | Shapley value decomposition of profitability factors |
+
+**Two-tier model architecture**: Altman Z-Score always works with zero configuration using proxy variables from fundamentals. When a trained XGBoost model exists in `xai/artifacts/`, it activates automatically (mirrors the Yahoo/Bloomberg provider pattern).
+
+**Shapley values without dependencies**: The built-in Shapley calculator (`xai/shapley.py`) provides exact analytical Shapley values for the Z-Score linear model and permutation-based approximate Shapley for any other model. The optional `shap` library enhances this with waterfall plots, but explanations always work even in a minimal install.
+
+**Dual explainability**: Feature-level Shapley values (quantitative: "debt_to_equity contributed +0.04 to distress risk") plus agent-level attribution (qualitative: "the risk manager's bear case shifted conviction by -1.2").
+
+```bash
+pip install -e ".[xai]"           # Optional: XGBoost + shap + matplotlib
+python -m xai.train --data data.csv --target is_distressed  # Train custom model
+```
 
 ---
 
@@ -191,6 +223,7 @@ Each pipeline node runs at a task-appropriate temperature instead of a single gl
 | Node | Temperature | Reasoning |
 |------|------------|-----------|
 | `gather_data` | 0.1 | Factual retrieval — one "right" answer |
+| `run_xai_analysis` | 0.0 | Deterministic computation (no LLM calls) |
 | `run_sector_analyst` | 0.5 | Balanced exploration of thesis points |
 | `run_risk_manager` | 0.5 | Explore unlikely-but-possible tail risks |
 | `run_macro_analyst` | 0.5 | Balanced macro analysis |
@@ -277,7 +310,7 @@ python app.py
 ### Test
 
 ```bash
-pytest tests/ -v   # 310 tests
+pytest tests/ -v   # 358 tests
 ```
 
 ---
@@ -365,12 +398,23 @@ multi-agent-investment-committee/
 │   ├── portfolio.py             # Multi-asset portfolio construction
 │   ├── explainability.py        # Agent attribution decomposition
 │   └── __main__.py              # CLI: python -m backtest
+├── xai/
+│   ├── models.py                # XAIResult, DistressAssessment, ReturnDecomposition schemas
+│   ├── features.py              # 12-feature extraction from fundamentals (% string parsing)
+│   ├── distress.py              # AltmanZScoreModel + optional XGBoostDistressModel
+│   ├── shapley.py               # Built-in Shapley: ExactLinearShapley + PermutationShapley
+│   ├── explainer.py             # SHAP wrapper with built-in fallback
+│   ├── returns.py               # Distress screening + expected return computation
+│   ├── pipeline.py              # XAIPipeline: orchestrates all 5 steps
+│   ├── node.py                  # LangGraph node (between gather_data and analysts)
+│   ├── train.py                 # CLI: python -m xai.train (optional XGBoost training)
+│   └── artifacts/               # Trained models (.gitignored)
 ├── api/
 │   ├── main.py                  # FastAPI app with /analyze, /signals, /backtest, /portfolio
 │   └── models.py                # Request/response Pydantic models
 ├── config/
-│   └── settings.py              # Pydantic settings with .env + per-node temperature overrides
-├── tests/                       # 310 tests
+│   └── settings.py              # Pydantic settings with .env + per-node temperature overrides + XAI config
+├── tests/                       # 358 tests
 ├── .env.example                 # Environment variable template
 ├── CHANGELOG.md                 # Version history
 └── pyproject.toml
@@ -386,7 +430,9 @@ multi-agent-investment-committee/
 - [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) -- Black-Litterman model, efficient frontier, covariance shrinkage
 - [FastAPI](https://fastapi.tiangolo.com/) -- REST API for programmatic access
 - [yfinance](https://github.com/ranaroussi/yfinance) -- Market data
-- [pytest](https://docs.pytest.org/) -- 310 tests with mock LLM fixtures
+- [pytest](https://docs.pytest.org/) -- 358 tests with mock LLM fixtures
+- [SHAP](https://github.com/shap/shap) -- Shapley value explanations (optional; built-in fallback included)
+- [XGBoost](https://xgboost.readthedocs.io/) -- Optional trained distress model (Altman Z-Score always available)
 
 LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 
@@ -405,6 +451,7 @@ LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 - v3.6: Eval harness, adversarial testing framework, Likert scoring, data provider abstraction
 - v3.7: Black-Litterman portfolio optimizer, per-node temperature routing
 - v3.8: Signal persistence (SQLite), historical backtesting, calibration analysis, alpha decay, benchmark comparison, multi-asset portfolio, explainability/attribution, FastAPI REST endpoint, structured output hardening (retry + Ollama JSON mode)
+- v3.9: XAI pre-screen module — Altman Z-Score/XGBoost distress estimation, built-in Shapley value decomposition (exact linear + permutation-based), expected return computation, dual explainability (feature-level + agent-level). Based on Sotic & Radovanovic (2024)
 
 ---
 

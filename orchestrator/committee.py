@@ -56,6 +56,7 @@ class CommitteeResult:
     risk_rebuttal: Rebuttal | None = None
     committee_memo: CommitteeMemo | None = None
     optimization_result: Any | None = None
+    xai_result: Any | None = None
     traces: dict[str, ReasoningTrace] = field(default_factory=dict)
     conviction_timeline: list[ConvictionSnapshot] = field(default_factory=list)
     parsing_failures: list[str] = field(default_factory=list)
@@ -76,6 +77,11 @@ class CommitteeResult:
                 self.optimization_result.model_dump()
                 if self.optimization_result and hasattr(self.optimization_result, 'model_dump')
                 else None
+            ),
+            "xai_result": (
+                self.xai_result.model_dump()
+                if self.xai_result and hasattr(self.xai_result, 'model_dump')
+                else self.xai_result
             ),
             "conviction_timeline": [
                 {

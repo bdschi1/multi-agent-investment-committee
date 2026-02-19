@@ -57,6 +57,7 @@ class AnalysisResponse(BaseModel):
     macro_view: dict[str, Any] | None = None
     committee_memo: dict[str, Any] | None = None
     optimization_result: dict[str, Any] | None = None
+    xai_analysis: dict[str, Any] | None = None
     duration_s: float = 0.0
 
 

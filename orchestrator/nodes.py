@@ -216,7 +216,7 @@ def _pm_rationale(memo) -> str:
 # Phase 0: Data Gathering
 # ---------------------------------------------------------------------------
 
-def gather_data(state: dict, config: RunnableConfig | None = None) -> dict:
+def gather_data(state: dict, config: RunnableConfig) -> dict:
     """
     Gather market data for the ticker.
 
@@ -247,7 +247,7 @@ def gather_data(state: dict, config: RunnableConfig | None = None) -> dict:
 # Phase 1: Parallel Analysis Nodes
 # ---------------------------------------------------------------------------
 
-def run_sector_analyst(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_sector_analyst(state: dict, config: RunnableConfig) -> dict:
     """Run the Sector Analyst agent (bull case)."""
     model = _get_model(state, config)
     model = with_temperature(model, get_node_temperature("run_sector_analyst"))
@@ -276,7 +276,7 @@ def run_sector_analyst(state: dict, config: RunnableConfig | None = None) -> dic
     return result_dict
 
 
-def run_risk_manager(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_risk_manager(state: dict, config: RunnableConfig) -> dict:
     """Run the Risk Manager agent (bear case)."""
     model = _get_model(state, config)
     model = with_temperature(model, get_node_temperature("run_risk_manager"))
@@ -305,7 +305,7 @@ def run_risk_manager(state: dict, config: RunnableConfig | None = None) -> dict:
     return result_dict
 
 
-def run_macro_analyst(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_macro_analyst(state: dict, config: RunnableConfig) -> dict:
     """Run the Macro Analyst agent (top-down context)."""
     model = _get_model(state, config)
     model = with_temperature(model, get_node_temperature("run_macro_analyst"))
@@ -338,7 +338,7 @@ def run_macro_analyst(state: dict, config: RunnableConfig | None = None) -> dict
 # Phase 1 Reporter (fan-in convergence point)
 # ---------------------------------------------------------------------------
 
-def report_phase1(state: dict, config: RunnableConfig | None = None) -> dict:
+def report_phase1(state: dict, config: RunnableConfig) -> dict:
     """
     Log Phase 1 scores after all three analysts complete.
     Initializes debate_round counter.
@@ -364,7 +364,7 @@ def report_phase1(state: dict, config: RunnableConfig | None = None) -> dict:
 # Debate skip marker
 # ---------------------------------------------------------------------------
 
-def mark_debate_skipped(state: dict, config: RunnableConfig | None = None) -> dict:
+def mark_debate_skipped(state: dict, config: RunnableConfig) -> dict:
     """Set flag when debate is skipped due to convergence."""
     return {"debate_skipped": True}
 
@@ -373,7 +373,7 @@ def mark_debate_skipped(state: dict, config: RunnableConfig | None = None) -> di
 # Phase 2: Debate
 # ---------------------------------------------------------------------------
 
-def run_debate_round(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_debate_round(state: dict, config: RunnableConfig) -> dict:
     """
     Execute one debate round: analyst.rebut() and risk_mgr.rebut()
     in parallel via ThreadPoolExecutor, exactly as v1 does.
@@ -461,7 +461,7 @@ def run_debate_round(state: dict, config: RunnableConfig | None = None) -> dict:
 # Phase 2 Reporter
 # ---------------------------------------------------------------------------
 
-def report_debate_complete(state: dict, config: RunnableConfig | None = None) -> dict:
+def report_debate_complete(state: dict, config: RunnableConfig) -> dict:
     """Log debate completion and note convergence if applicable."""
     ar = state.get("analyst_rebuttal")
     rr = state.get("risk_rebuttal")
@@ -538,7 +538,7 @@ def _compute_t_signal(direction: int, raw_confidence: float) -> float:
 # Phase 3: Portfolio Manager
 # ---------------------------------------------------------------------------
 
-def run_portfolio_manager(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_portfolio_manager(state: dict, config: RunnableConfig) -> dict:
     """
     Run the PM synthesis — identical context assembly to v1
     (orchestrator/committee.py lines 238-247).
@@ -630,7 +630,7 @@ def run_portfolio_manager(state: dict, config: RunnableConfig | None = None) -> 
 # Finalize
 # ---------------------------------------------------------------------------
 
-def finalize(state: dict, config: RunnableConfig | None = None) -> dict:
+def finalize(state: dict, config: RunnableConfig) -> dict:
     """Compute final timing and token totals, log completion."""
     duration_ms = (time.time() - state["start_time"]) * 1000
     total_tokens = sum(t.total_tokens for t in state.get("traces", {}).values())

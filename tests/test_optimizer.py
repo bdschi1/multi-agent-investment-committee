@@ -449,7 +449,7 @@ class TestGraphIntegration:
             "context": {},
         }
 
-        result = run_optimizer(state)
+        result = run_optimizer(state, config={"configurable": {}})
 
         assert "optimization_result" in result
         assert isinstance(result["optimization_result"], OptimizerFallback)
@@ -472,7 +472,7 @@ class TestGraphIntegration:
         }
 
         # Will fail at build_universe (no real data) but should fallback gracefully
-        result = run_optimizer(state)
+        result = run_optimizer(state, config={"configurable": {}})
 
         assert "optimization_result" in result
         # Should be a fallback since yfinance can't fetch FAKE_TICKER

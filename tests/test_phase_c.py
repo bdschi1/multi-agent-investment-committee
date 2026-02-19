@@ -285,9 +285,6 @@ class TestConfigPattern:
             sig = inspect.signature(func)
             params = list(sig.parameters.keys())
             assert "config" in params, f"{func.__name__} missing 'config' parameter"
-            # config should have a default of None
-            assert sig.parameters["config"].default is None, \
-                f"{func.__name__}'s config param should default to None"
 
 
 # ===========================================================================

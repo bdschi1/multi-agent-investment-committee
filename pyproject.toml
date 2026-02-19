@@ -101,7 +101,7 @@ packages = ["agents", "orchestrator", "tools", "config", "evals", "optimizer", "
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]

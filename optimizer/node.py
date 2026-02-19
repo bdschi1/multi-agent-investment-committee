@@ -13,7 +13,7 @@ except ImportError:
     RunnableConfig = Any
 
 
-def run_optimizer(state: dict, config: RunnableConfig | None = None) -> dict:
+def run_optimizer(state: dict, config: RunnableConfig) -> dict:
     """
     LangGraph node: run Black-Litterman optimization on PM output.
 
@@ -30,9 +30,8 @@ def run_optimizer(state: dict, config: RunnableConfig | None = None) -> dict:
 
     # Status callback
     on_status = None
-    if config and hasattr(config, "get"):
-        configurable = config.get("configurable", {})
-        on_status = configurable.get("on_status")
+    configurable = config.get("configurable", {}) if config else {}
+    on_status = configurable.get("on_status")
     if on_status is None:
         on_status = state.get("on_status")
 

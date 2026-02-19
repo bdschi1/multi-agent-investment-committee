@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.8.0] - 2026-02-18
+
+### Added
+- **Signal persistence** (`backtest/database.py`) — SQLite database stores every IC signal with conviction, direction, T signal, BL optimizer output, and realized returns at 5 horizons (1d/5d/10d/20d/60d)
+- **Historical backtest engine** (`backtest/runner.py`) — fills realized returns from yfinance, computes directional P&L, Sharpe, Sortino, win rate, direction accuracy, max drawdown, information coefficients
+- **Calibration analysis** (`backtest/calibration.py`) — bins signals by conviction level, measures hit rate and average return per bucket, conviction-return rank correlation
+- **Alpha decay curves** (`backtest/alpha_decay.py`) — information coefficient at each forward horizon, identifies optimal holding period and signal half-life, t-statistics for significance
+- **Benchmark comparison** (`backtest/benchmark.py`) — IC signals vs SPY buy-and-hold, always-long, and momentum (T-signal ranked) strategies
+- **Multi-asset portfolio construction** (`backtest/portfolio.py`) — aggregates latest signal per ticker, constructs weighted portfolio (by T signal, equal weight, or conviction), computes gross/net exposure
+- **Explainability / agent attribution** (`backtest/explainability.py`) — decomposes each T signal into bull/bear/macro/debate agent contributions, identifies dominant agent per signal, computes dominance rates
+- **Backtest CLI** (`python -m backtest`) — stats, fill-returns, run, calibration, decay, benchmark, portfolio, explain, report subcommands
+- **FastAPI REST endpoint** (`api/main.py`) — POST /analyze (run pipeline + persist signal), GET /signals, POST /backtest, GET /portfolio, GET /health
+- **Retry-with-feedback JSON extraction** (`agents/base.py: retry_extract_json`) — when initial parse fails, re-prompts the model with the error and truncated response; typically recovers 80%+ of parse failures
+- **Ollama JSON mode** — prompts requesting JSON output automatically trigger Ollama's `format: "json"` constraint via prompt heuristic detection
+- **Signal persistence in Gradio** — every committee run automatically stores a signal in `store/signals.db` for later backtesting
+- 50 new tests (37 backtest/analytics + 10 API + 3 retry extraction)
+
+### Changed
+- All 4 agent `act()` methods now use `retry_extract_json` with 1 retry before falling back to defaults
+- Ollama model factory detects JSON-requesting prompts and enables constrained output mode
+- `pyproject.toml` version bumped to 3.8.0, added `fastapi` and `uvicorn` to dependencies
+- `backtest/` and `api/` packages added to wheel build targets
+
+### Dependencies
+- Added `fastapi>=0.115.0`, `uvicorn>=0.30.0` to base dependencies
+
 ## [3.7.0] - 2026-02-18
 
 ### Added

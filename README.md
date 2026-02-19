@@ -23,7 +23,7 @@ tags:
 Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — validated by a real Black-Litterman portfolio optimizer.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-260%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-310%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
@@ -32,7 +32,7 @@ Four AI agents analyze a ticker in parallel, debate each other's theses, and pro
 
 ## How It Works
 
-The pipeline runs in four phases:
+The pipeline runs in five phases:
 
 1. **Parallel Analysis** -- Three agents analyze the same ticker simultaneously:
    - **Sector Analyst** (bull case) -- sentiment extraction, return decomposition, catalyst identification
@@ -44,6 +44,8 @@ The pipeline runs in four phases:
 3. **PM Synthesis** -- Portfolio Manager weighs all evidence, applies sizing heuristics, produces a committee memo with recommendation and T signal.
 
 4. **Portfolio Optimization** -- Black-Litterman optimizer takes the PM's conviction as a view, computes actual covariance/weights/risk metrics, and displays computed values alongside the LLM heuristics.
+
+5. **Signal Persistence + Analytics** -- Every signal is stored in SQLite for historical backtesting, calibration analysis, alpha decay measurement, benchmark comparison, and multi-asset portfolio construction.
 
 ```
 User Input (ticker + guidance + docs)
@@ -102,6 +104,64 @@ After the PM produces its qualitative sizing heuristics, the `optimizer/` packag
 6. **Analytics** -- computed Sharpe/Sortino, OLS factor betas with t-stats, marginal contribution to risk (MCTR)
 
 The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
+
+---
+
+## Backtesting + Signal Analytics
+
+The `backtest/` package provides a full analytics stack for evaluating signal quality over time:
+
+| Module | What it does |
+|--------|-------------|
+| **Signal Persistence** | SQLite database stores every signal with conviction, direction, T signal, and BL optimizer output |
+| **Historical Backtest** | Fills realized 1d/5d/10d/20d/60d returns, computes directional P&L, Sharpe, win rate, max drawdown |
+| **Calibration** | Bins signals by conviction level, measures hit rate and avg return per bucket -- answers "is conviction 8/10 better than 6/10?" |
+| **Alpha Decay** | Information coefficient at each horizon -- identifies optimal holding period and signal half-life |
+| **Benchmark Comparison** | IC signals vs SPY buy-and-hold, always-long, and momentum (T-signal ranked) |
+| **Multi-Asset Portfolio** | Aggregates latest signal per ticker, constructs weighted portfolio with exposure metrics |
+| **Explainability** | Decomposes each T signal into bull/bear/macro/debate agent contributions |
+
+```bash
+python -m backtest stats                      # Signal and portfolio statistics
+python -m backtest fill-returns               # Fill realized returns from yfinance
+python -m backtest run --ticker NVDA          # Run backtest for a ticker
+python -m backtest calibration                # Conviction-return calibration
+python -m backtest decay                      # Alpha decay curve
+python -m backtest benchmark                  # Compare vs SPY, momentum
+python -m backtest portfolio                  # Build portfolio snapshot
+python -m backtest explain                    # Agent attribution analysis
+python -m backtest report                     # Full analytics report
+```
+
+---
+
+## REST API
+
+The `api/` package provides a FastAPI endpoint for programmatic access:
+
+```bash
+pip install -e "."
+uvicorn api.main:app --reload --port 8000
+```
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/analyze` | POST | Run full IC pipeline, returns signal + stores in DB |
+| `/signals` | GET | List stored signals (filter by ticker) |
+| `/signals/{id}` | GET | Get specific signal by ID |
+| `/backtest` | POST | Run backtest on stored signals |
+| `/portfolio` | GET | Build portfolio snapshot from latest signals |
+| `/fill-returns` | POST | Fill realized returns for stored signals |
+| `/health` | GET | Health check with signal stats |
+
+---
+
+## Structured Output Hardening
+
+All agents use a progressive JSON extraction pipeline with 7 repair strategies (markdown block removal, brace boundary, trailing comma fix, quote repair, unbalanced brace repair). v3.8 adds:
+
+- **Retry-with-feedback** -- When extraction fails, the model receives the error and its truncated response, and is prompted to produce clean JSON. One retry typically recovers 80%+ of parse failures.
+- **Ollama JSON mode** -- Prompts requesting JSON output automatically trigger Ollama's `format: "json"` constraint, preventing free-form text responses from smaller models.
 
 ---
 
@@ -217,7 +277,7 @@ python app.py
 ### Test
 
 ```bash
-pytest tests/ -v   # 260 tests
+pytest tests/ -v   # 310 tests
 ```
 
 ---
@@ -295,9 +355,22 @@ multi-agent-investment-committee/
 │   ├── reporter.py              # JSON/markdown report generation
 │   ├── scenarios/               # Ground-truth + adversarial YAML scenarios
 │   └── rubrics/                 # Scoring rubric definitions
+├── backtest/
+│   ├── database.py              # SQLite signal persistence (3 tables, indexes)
+│   ├── models.py                # SignalRecord, BacktestResult, CalibrationBucket, etc.
+│   ├── runner.py                # Historical backtest engine (fill returns, compute P&L)
+│   ├── calibration.py           # Conviction-return calibration analysis
+│   ├── alpha_decay.py           # IC at multiple horizons, optimal holding period
+│   ├── benchmark.py             # IC vs SPY, always-long, momentum
+│   ├── portfolio.py             # Multi-asset portfolio construction
+│   ├── explainability.py        # Agent attribution decomposition
+│   └── __main__.py              # CLI: python -m backtest
+├── api/
+│   ├── main.py                  # FastAPI app with /analyze, /signals, /backtest, /portfolio
+│   └── models.py                # Request/response Pydantic models
 ├── config/
 │   └── settings.py              # Pydantic settings with .env + per-node temperature overrides
-├── tests/                       # 260 tests
+├── tests/                       # 310 tests
 ├── .env.example                 # Environment variable template
 ├── CHANGELOG.md                 # Version history
 └── pyproject.toml
@@ -311,8 +384,9 @@ multi-agent-investment-committee/
 - [Gradio](https://www.gradio.app/) -- UI with 8 analysis tabs, T signal gauge, document upload
 - [Pydantic](https://docs.pydantic.dev/) -- Output validation for all agent schemas
 - [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) -- Black-Litterman model, efficient frontier, covariance shrinkage
+- [FastAPI](https://fastapi.tiangolo.com/) -- REST API for programmatic access
 - [yfinance](https://github.com/ranaroussi/yfinance) -- Market data
-- [pytest](https://docs.pytest.org/) -- 260 tests with mock LLM fixtures
+- [pytest](https://docs.pytest.org/) -- 310 tests with mock LLM fixtures
 
 LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 
@@ -330,6 +404,7 @@ LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 - v3.5: T signal with citation, conviction tracker redesign
 - v3.6: Eval harness, adversarial testing framework, Likert scoring, data provider abstraction
 - v3.7: Black-Litterman portfolio optimizer, per-node temperature routing
+- v3.8: Signal persistence (SQLite), historical backtesting, calibration analysis, alpha decay, benchmark comparison, multi-asset portfolio, explainability/attribution, FastAPI REST endpoint, structured output hardening (retry + Ollama JSON mode)
 
 ---
 

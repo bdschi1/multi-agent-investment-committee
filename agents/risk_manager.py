@@ -18,6 +18,7 @@ from agents.base import (
     BearCase,
     Rebuttal,
     extract_json,
+    retry_extract_json,
     clean_json_artifacts,
 )
 
@@ -251,7 +252,9 @@ Respond ONLY with the JSON object, no other text."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            parsed, _ = extract_json(response_text)
+            parsed, retried = retry_extract_json(self.model, prompt, response_text, max_retries=1)
+            if retried:
+                logger.info(f"BearCase JSON extraction required retry for {ticker}")
             return BearCase(**parsed)
         except Exception as e:
             logger.warning(f"Failed to parse bear case JSON: {e}. Using fallback.")

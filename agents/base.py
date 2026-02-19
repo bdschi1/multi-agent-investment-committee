@@ -682,6 +682,72 @@ def extract_json(text: str) -> tuple[dict, bool]:
 
 
 # ---------------------------------------------------------------------------
+# Retry-with-feedback JSON extraction
+# ---------------------------------------------------------------------------
+
+def retry_extract_json(
+    model: Any,
+    original_prompt: str,
+    response_text: str,
+    max_retries: int = 1,
+) -> tuple[dict, bool]:
+    """
+    Try to extract JSON; on failure, re-prompt the model with error feedback.
+
+    This is the structured output hardening layer. When the initial parse
+    fails, it sends the model a focused repair prompt containing:
+        1. The original response (truncated)
+        2. The specific parse error
+        3. A demand for clean JSON only
+
+    Args:
+        model: LLM callable(str) -> str
+        original_prompt: The prompt that produced the response
+        response_text: The raw LLM response that failed to parse
+        max_retries: Number of retry attempts (default 1)
+
+    Returns:
+        (parsed_dict, was_retried) — was_retried is True if retry was needed.
+
+    Raises:
+        ValueError if all extraction + retry attempts fail.
+    """
+    # First try: normal extraction
+    last_error: Exception = ValueError("No extraction attempted")
+    try:
+        result, repaired = extract_json(response_text)
+        return result, False
+    except ValueError as e:
+        last_error = e
+
+    # Retry loop with feedback
+    for attempt in range(max_retries):
+        retry_prompt = (
+            "Your previous response could not be parsed as valid JSON.\n\n"
+            f"Error: {last_error}\n\n"
+            f"Your response started with:\n{response_text[:500]}\n\n"
+            "Please respond with ONLY a valid JSON object. "
+            "No markdown, no explanation, no code blocks — just the raw JSON object "
+            "starting with {{ and ending with }}."
+        )
+
+        try:
+            retry_response = model(retry_prompt)
+            retry_text = retry_response if isinstance(retry_response, str) else str(retry_response)
+            result, _ = extract_json(retry_text)
+            logger.info(f"JSON extraction succeeded on retry attempt {attempt + 1}")
+            return result, True
+        except (ValueError, Exception) as e:
+            last_error = e
+            logger.warning(f"JSON retry attempt {attempt + 1} failed: {e}")
+
+    raise ValueError(
+        f"JSON extraction failed after {max_retries} retries. "
+        f"Last error: {last_error}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # JSON artifact cleaner — for fallback text fields
 # ---------------------------------------------------------------------------
 

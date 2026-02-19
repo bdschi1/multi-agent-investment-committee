@@ -77,12 +77,35 @@ gather_data → [sector_analyst, risk_manager, macro_analyst] (parallel)
 
 `tools/data_providers/`: `BaseDataProvider` ABC → `YahooProvider` (default), `BloombergProvider`, `IBProvider`. Factory pattern via `get_provider()`.
 
+### Backtest + Analytics Package
+
+`backtest/` is a self-contained analytics stack:
+- `database.py`: SQLite persistence — 3 tables (signals, portfolio_snapshots, backtest_results) with indexes
+- `runner.py`: Historical backtest engine — fills realized returns from yfinance, computes P&L/Sharpe/win rate
+- `calibration.py`: Conviction → realized return mapping in configurable buckets
+- `alpha_decay.py`: IC at multiple horizons, optimal holding period identification
+- `benchmark.py`: IC signals vs SPY, always-long, and momentum strategies
+- `portfolio.py`: Multi-asset portfolio from latest signals (T-signal, equal, conviction weighting)
+- `explainability.py`: Agent-level attribution decomposition
+- CLI: `python -m backtest [stats|run|calibration|decay|benchmark|portfolio|explain|report]`
+
+### REST API
+
+`api/main.py`: FastAPI app with endpoints for `/analyze`, `/signals`, `/backtest`, `/portfolio`, `/health`. Run with `uvicorn api.main:app --reload`.
+
+### Structured Output Hardening
+
+- `retry_extract_json()` in `agents/base.py`: re-prompts model with error feedback when initial parse fails
+- Ollama JSON mode: prompt heuristic detection triggers `format: "json"` constraint
+- All 4 agents use retry in their `act()` methods before falling back to defaults
+
 ## Testing Conventions
 
 - Tests use mock LLM fixtures (no API keys needed): `mock_model` returns canned JSON
 - Optimizer tests mock `build_universe()` with synthetic price data
+- Backtest tests use `tmp_path` fixture for temporary SQLite databases
 - Temperature tests verify kwarg passthrough and graceful fallback
-- Run `pytest tests/ -v` — expect ~260 passing, 1 pre-existing skip in `test_tools_phase_b.py`
+- Run `pytest tests/ -v` — expect ~310 passing, 1 pre-existing count mismatch in `test_tools_phase_b.py`
 
 ## Settings
 

@@ -175,18 +175,35 @@ def _create_ollama_model(model_name: str | None = None) -> callable:
             f"Available models can be listed with: ollama list"
         ) from exc
 
-    def call(prompt: str, *, temperature: float | None = None) -> str:
-        response = client.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            options={
+    def call(prompt: str, *, temperature: float | None = None, json_mode: bool = False) -> str:
+        kwargs = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "options": {
                 "temperature": temperature if temperature is not None else settings.temperature,
                 "num_predict": settings.max_tokens_per_agent,
             },
-        )
+        }
+        # JSON mode: instruct Ollama to constrain output to valid JSON
+        if json_mode or _prompt_requests_json(prompt):
+            kwargs["format"] = "json"
+        response = client.chat(**kwargs)
         return response["message"]["content"]
 
     return call
+
+
+def _prompt_requests_json(prompt: str) -> bool:
+    """Heuristic: detect if a prompt is asking for JSON output."""
+    indicators = [
+        "Respond ONLY with the JSON",
+        "Respond in valid JSON",
+        "respond with a JSON",
+        "output as JSON",
+        "JSON object",
+        "JSON matching this",
+    ]
+    return any(ind.lower() in prompt.lower() for ind in indicators)
 
 
 def _create_deepseek_model(model_name: str | None = None) -> callable:
@@ -408,6 +425,53 @@ def create_model(
 
 
 # ---------------------------------------------------------------------------
+# Signal persistence — store signals in SQLite for backtesting
+# ---------------------------------------------------------------------------
+
+def _persist_signal(result: CommitteeResult, provider_name: str, model_name: str) -> None:
+    """Persist a committee result as a signal in the backtest database."""
+    try:
+        from backtest import SignalDatabase, SignalRecord
+
+        if not result.committee_memo:
+            return
+
+        db = SignalDatabase()
+        memo = result.committee_memo
+
+        signal = SignalRecord(
+            ticker=result.ticker,
+            signal_date=datetime.now(timezone.utc),
+            provider=provider_name,
+            model_name=model_name,
+            recommendation=memo.recommendation,
+            t_signal=memo.t_signal,
+            conviction=memo.conviction,
+            position_direction=memo.position_direction,
+            raw_confidence=memo.raw_confidence,
+            bull_conviction=result.bull_case.conviction_score if result.bull_case else 5.0,
+            bear_conviction=result.bear_case.bearish_conviction if result.bear_case else 5.0,
+            macro_favorability=result.macro_view.macro_favorability if result.macro_view else 5.0,
+            duration_s=result.total_duration_ms / 1000,
+            total_tokens=result.total_tokens,
+        )
+
+        # Add BL optimizer results if available
+        if result.optimization_result and hasattr(result.optimization_result, 'success'):
+            opt = result.optimization_result
+            if opt.success:
+                signal.bl_optimal_weight = opt.optimal_weight
+                signal.bl_sharpe = opt.computed_sharpe
+                signal.bl_sortino = opt.computed_sortino
+
+        signal_id = db.store_signal(signal)
+        db.close()
+        logger.info(f"Signal persisted: {result.ticker} → id={signal_id}")
+    except Exception as e:
+        logger.warning(f"Failed to persist signal: {e}")
+
+
+# ---------------------------------------------------------------------------
 # JSON run logger (local only — never pushed to git/HF)
 # ---------------------------------------------------------------------------
 
@@ -539,6 +603,9 @@ def run_committee_analysis(
 
         # Store in session memory for future reference
         store_analysis(ticker, result)
+
+        # Persist signal to SQLite for backtest/analytics
+        _persist_signal(result, provider_name, selected_model or "")
 
         # Determine model used (explicit selection overrides settings default)
         if selected_model:

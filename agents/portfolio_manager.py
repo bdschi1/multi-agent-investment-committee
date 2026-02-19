@@ -21,6 +21,7 @@ from agents.base import (
     CommitteeMemo,
     Rebuttal,
     extract_json,
+    retry_extract_json,
     clean_json_artifacts,
 )
 
@@ -372,7 +373,9 @@ Respond ONLY with the JSON object, no other text."""
         response_text = response if isinstance(response, str) else str(response)
 
         try:
-            parsed, _ = extract_json(response_text)
+            parsed, retried = retry_extract_json(self.model, prompt, response_text, max_retries=1)
+            if retried:
+                logger.info(f"CommitteeMemo JSON extraction required retry for {ticker}")
             return CommitteeMemo(**parsed)
         except Exception as e:
             logger.warning(f"Failed to parse committee memo JSON: {e}. Using fallback.")

@@ -463,6 +463,19 @@ MIT
 
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 
+## Related Work
+
+This system draws on academic research in multi-agent financial AI, explainability, and adversarial robustness:
+
+- **AlphaAgents** (Zhao et al., 2025) — BlackRock's multi-agent LLM framework for equity portfolio construction using debate between Fundamental, Sentiment, and Valuation agents. Directly informs our committee debate architecture and risk tolerance profile design (`evals/risk_profiles.py`). [arXiv:2508.11152](https://arxiv.org/abs/2508.11152)
+- **AuditAgent** (Bai et al., 2025) — Multi-agent framework for cross-document fraud evidence discovery with Bayesian prior modeling for audit focus narrowing. Informs our multi-expert reasoning pattern and eval grading methodology. [arXiv:2510.00156](https://arxiv.org/abs/2510.00156)
+- **Red-Teaming Financial AI / FinJailbreak** (Li, 2026) — 1,250 adversarial prompts across 5 financial malfeasance categories, with Financial Constitutional Fine-Tuning (FCFT) defense. Inspires our red-team adversarial scenarios in `evals/scenarios/redteam_*.yaml`. [AAAI 2026]
+- **Explainable AI in Finance** (Sotic & Radovanovic, 2024) — Comprehensive taxonomy of XAI methods for financial applications. Directly informs the `xai/` module's Shapley value architecture and multi-stakeholder explainability design. [doi:10.20935/AcadAI8017]
+- **XAI for SME Investment** (Babaei & Giudici, 2025) — Dual-component XAI framework combining credit risk and expected return models with SHAP explanations. Validates our approach of integrating Shapley-based explainability into the investment pipeline. [Expert Systems with Applications, 2025]
+- **FLaME** (Matlin et al., 2025) — Holistic financial NLP evaluation across 6 task categories. Provides taxonomy for RAG metrics evaluation (`evals/rag_metrics.py`). [arXiv:2506.15846](https://arxiv.org/abs/2506.15846)
+
+---
+
 ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white)
 ![Gradio](https://img.shields.io/badge/Gradio-F97316?style=flat&logo=gradio&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=flat&logo=pydantic&logoColor=white)

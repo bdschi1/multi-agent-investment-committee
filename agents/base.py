@@ -60,7 +60,8 @@ def _coerce_str_list(v: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 
 class AgentRole(str, Enum):
-    SECTOR_ANALYST = "sector_analyst"
+    SECTOR_ANALYST = "sector_analyst"   # Long Analyst (display label updated)
+    SHORT_ANALYST = "short_analyst"     # Dedicated short thesis agent
     RISK_MANAGER = "risk_manager"
     PORTFOLIO_MANAGER = "portfolio_manager"
     MACRO_ANALYST = "macro_analyst"
@@ -189,8 +190,62 @@ class BullCase(BaseModel):
         return _coerce_str_list(v)
 
 
+class ShortCase(BaseModel):
+    """Structured output from the Short Analyst — dedicated short thesis."""
+
+    ticker: str
+    short_thesis: str = Field(default="", description="Specific mechanism for stock decline")
+    thesis_type: str = Field(
+        default="no_position",
+        description="alpha_short / hedge / pair_leg / no_position",
+    )
+    event_path: list[str] = Field(
+        default_factory=list,
+        description="Ordered events that cause the short to work",
+    )
+    supporting_evidence: list[str] = Field(default_factory=list)
+    alpha_vs_beta_assessment: str = Field(
+        default="",
+        description="Is this idiosyncratic or systematic risk?",
+    )
+    borrow_assessment: str = Field(
+        default="",
+        description="Short interest, days to cover, borrow cost estimate",
+    )
+    conviction_score: float = Field(
+        ge=0.0, le=10.0, default=5.0,
+        description="0 = no short conviction, 10 = maximum short conviction",
+    )
+    key_vulnerabilities: dict[str, Any] = Field(default_factory=dict)
+    estimated_short_return: str = Field(
+        default="",
+        description="Heuristic expected return from the short",
+    )
+    idiosyncratic_return: str = Field(
+        default="",
+        description="Stock-specific return vs sector decline",
+    )
+    estimated_sharpe: str = Field(
+        default="",
+        description="Using (-1 * expected_return) / vol",
+    )
+    risk_sizing: RiskSizing | None = Field(
+        default=None,
+        description="Short position sizing in risk units",
+    )
+    conviction_levers: list[ConvictionLever] = Field(
+        default_factory=list,
+        description="Key levers that change short conviction/sizing",
+    )
+
+    @field_validator("supporting_evidence", "event_path", mode="before")
+    @classmethod
+    def _coerce_str_lists(cls, v):
+        return _coerce_str_list(v)
+
+
 class BearCase(BaseModel):
-    """Structured output from the Risk Manager."""
+    """Structured output from the Risk Manager — sizing/structuring focus."""
 
     ticker: str
     risks: list[str] = Field(default_factory=list)
@@ -199,23 +254,34 @@ class BearCase(BaseModel):
     worst_case_scenario: str = ""
     bearish_conviction: float = Field(ge=0.0, le=10.0, description="0 = minimal concern, 10 = maximum bearish conviction")
     key_vulnerabilities: dict[str, Any] = Field(default_factory=dict)
-    # Active short positioning fields
-    short_thesis: str = Field(default="", description="Active short pitch if warranted")
-    actionable_recommendation: str = Field(
-        default="AVOID",
-        description="AVOID / UNDERWEIGHT / ACTIVE SHORT / HEDGE — not just defensive",
+    # Sizing/structuring fields (Risk Manager's primary v4 focus)
+    position_structure: str = Field(
+        default="outright",
+        description="outright / hedged / paired / options_overlay",
     )
-    technical_levels: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Key technical levels: support, resistance, breakdown triggers",
+    stop_loss_level: str = Field(
+        default="",
+        description="Specific price level for stop-loss",
+    )
+    max_risk_allocation: str = Field(
+        default="",
+        description="Max risk units allocated to this position",
+    )
+    stress_scenarios: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="2-3 stress tests with P&L impact: [{scenario, pnl_impact}, ...]",
+    )
+    correlation_flags: list[str] = Field(
+        default_factory=list,
+        description="Crowding/correlation warnings",
     )
     # Risk-unit framework (ported from llm-long-short-arena)
     risk_sizing: RiskSizing | None = Field(
         default=None,
-        description="Short/hedge sizing in risk units with drawdown triggers",
+        description="Position sizing in risk units with drawdown triggers",
     )
 
-    @field_validator("risks", "second_order_effects", "third_order_effects", mode="before")
+    @field_validator("risks", "second_order_effects", "third_order_effects", "correlation_flags", mode="before")
     @classmethod
     def _coerce_str_lists(cls, v):
         return _coerce_str_list(v)
@@ -381,6 +447,14 @@ class CommitteeMemo(BaseModel):
     key_factors: list[str] = Field(default_factory=list)
     bull_points_accepted: list[str] = Field(default_factory=list)
     bear_points_accepted: list[str] = Field(default_factory=list)
+    short_points_accepted: list[str] = Field(
+        default_factory=list,
+        description="Short analyst arguments the PM found compelling",
+    )
+    conviction_change_map: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Per event: which agent's conviction changes, direction, magnitude",
+    )
     dissenting_points: list[str] = Field(default_factory=list)
     risk_mitigants: list[str] = Field(default_factory=list)
     time_horizon: str = ""
@@ -467,7 +541,7 @@ class CommitteeMemo(BaseModel):
 
     @field_validator(
         "key_factors", "bull_points_accepted", "bear_points_accepted",
-        "dissenting_points", "risk_mitigants", "event_path",
+        "short_points_accepted", "dissenting_points", "risk_mitigants", "event_path",
         mode="before",
     )
     @classmethod

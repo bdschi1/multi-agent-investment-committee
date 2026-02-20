@@ -65,6 +65,20 @@ class MockLLMPhaseC:
                 })
             return "Thinking about bull case..."
 
+        # Short case
+        if "short case" in prompt_lower or "short thesis" in prompt_lower or "short opportunity" in prompt_lower:
+            if "json" in prompt_lower:
+                return json.dumps({
+                    "ticker": "TEST",
+                    "short_thesis": "Overvalued vs peers",
+                    "thesis_type": "alpha_short",
+                    "event_path": ["Earnings miss"],
+                    "supporting_evidence": ["Insider selling"],
+                    "conviction_score": 4.5,
+                    "key_vulnerabilities": {"valuation": "Premium"},
+                })
+            return "Thinking about short case..."
+
         # Bear case
         if "bear case" in prompt_lower or "risk" in prompt_lower:
             if "json" in prompt_lower:
@@ -271,6 +285,7 @@ class TestConfigPattern:
         node_funcs = [
             nodes.gather_data,
             nodes.run_sector_analyst,
+            nodes.run_short_analyst,
             nodes.run_risk_manager,
             nodes.run_macro_analyst,
             nodes.report_phase1,
@@ -312,15 +327,17 @@ class TestTwoPhaseExecution:
             tool_registry=None,
         )
 
-        # Phase 1 should produce bull, bear, macro, and debate results
+        # Phase 1 should produce bull, short, bear, macro, and debate results
         assert state["ticker"] == "TEST"
         assert state["bull_case"] is not None
+        assert state["short_case"] is not None
         assert state["bear_case"] is not None
         assert state["macro_view"] is not None
         # Should NOT have committee_memo (that's Phase 2)
         assert state.get("committee_memo") is None
-        # Should have traces for 3 analysts
+        # Should have traces for 4 analysts
         assert "sector_analyst" in state.get("traces", {})
+        assert "short_analyst" in state.get("traces", {})
         assert "risk_manager" in state.get("traces", {})
         assert "macro_analyst" in state.get("traces", {})
 

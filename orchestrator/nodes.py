@@ -22,11 +22,12 @@ from typing import Any
 
 from langgraph.types import RunnableConfig
 
-from agents.base import clean_json_artifacts
+from agents.base import ShortCase, clean_json_artifacts
 from agents.macro_analyst import MacroAnalystAgent
 from agents.portfolio_manager import PortfolioManagerAgent
 from agents.risk_manager import RiskManagerAgent
 from agents.sector_analyst import SectorAnalystAgent
+from agents.short_analyst import ShortAnalystAgent
 from orchestrator.committee import ConvictionSnapshot
 from orchestrator.temperature import get_node_temperature, with_temperature
 
@@ -104,6 +105,12 @@ def _is_parsing_degraded_macro(macro_view) -> bool:
     return _PARSING_FAILED_SENTINEL in str(phase)
 
 
+def _is_parsing_degraded_short(short_case) -> bool:
+    """Check if the short case was a parsing-fallback object."""
+    evidence = getattr(short_case, "supporting_evidence", [])
+    return any(_PARSING_FAILED_SENTINEL in str(e) for e in evidence)
+
+
 def _is_parsing_degraded_memo(memo) -> bool:
     """Check if the committee memo was a parsing-fallback object."""
     factors = getattr(memo, "key_factors", [])
@@ -160,13 +167,28 @@ def _bear_rationale(bear_case) -> str:
     if risks:
         cleaned_risk = _clean_rationale_text(str(risks[0]))
         parts.append(f"Key risk: {cleaned_risk[:120]}")
-    rec = getattr(bear_case, "actionable_recommendation", "")
-    if rec:
-        parts.append(f"Rec: {_clean_rationale_text(rec)}")
-    short = getattr(bear_case, "short_thesis", "")
-    if short:
-        parts.append(f"Short thesis: {_clean_rationale_text(short)[:100]}")
-    return " | ".join(parts)[:300] if parts else "Initial bear thesis established."
+    structure = getattr(bear_case, "position_structure", "")
+    if structure:
+        parts.append(f"Structure: {_clean_rationale_text(structure)[:60]}")
+    stop = getattr(bear_case, "stop_loss_level", "")
+    if stop:
+        parts.append(f"Stop: {_clean_rationale_text(stop)[:60]}")
+    return " | ".join(parts)[:300] if parts else "Risk assessment established."
+
+
+def _short_rationale(short_case) -> str:
+    """Extract a concise rationale from the short case output."""
+    parts = []
+    thesis = getattr(short_case, "short_thesis", "")
+    if thesis:
+        parts.append(_first_sentence(thesis))
+    thesis_type = getattr(short_case, "thesis_type", "")
+    if thesis_type:
+        parts.append(f"Type: {thesis_type}")
+    ret = getattr(short_case, "estimated_short_return", "")
+    if ret:
+        parts.append(f"Return: {_clean_rationale_text(ret)[:80]}")
+    return " | ".join(parts)[:300] if parts else "Short thesis established."
 
 
 def _macro_rationale(macro_view) -> str:
@@ -226,7 +248,7 @@ def gather_data(state: dict, config: RunnableConfig) -> dict:
     """
     _status(
         state,
-        "Phase 1/3: Sector Analyst, Risk Manager, and Macro Analyst "
+        "Phase 1/3: Long Analyst, Short Analyst, Risk Manager, and Macro Strategist "
         "analyzing in parallel...",
         config,
     )
@@ -334,26 +356,58 @@ def run_macro_analyst(state: dict, config: RunnableConfig) -> dict:
     return result_dict
 
 
+def run_short_analyst(state: dict, config: RunnableConfig) -> dict:
+    """Run the Short Analyst agent (short thesis)."""
+    model = _get_model(state, config)
+    model = with_temperature(model, get_node_temperature("run_short_analyst"))
+    tool_registry = _get_tool_registry(state, config)
+
+    agent = ShortAnalystAgent(model=model, tool_registry=tool_registry)
+    result = agent.run(state["ticker"], state["context"])
+
+    short_case = result["output"]
+    trace = result["trace"]
+
+    result_dict = {
+        "short_case": short_case,
+        "traces": {"short_analyst": trace},
+        "conviction_timeline": [
+            ConvictionSnapshot(
+                phase="Initial Analysis",
+                agent="Short Analyst",
+                score=short_case.conviction_score,
+                score_type="bearish",
+                rationale=_short_rationale(short_case),
+            )
+        ],
+        "parsing_failures": ["short_analyst"] if _is_parsing_degraded_short(short_case) else [],
+    }
+    return result_dict
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 Reporter (fan-in convergence point)
 # ---------------------------------------------------------------------------
 
 def report_phase1(state: dict, config: RunnableConfig) -> dict:
     """
-    Log Phase 1 scores after all three analysts complete.
+    Log Phase 1 scores after all four analysts complete.
     Initializes debate_round counter.
     """
     bc = state.get("bull_case")
     bear = state.get("bear_case")
+    sc = state.get("short_case")
     mv = state.get("macro_view")
 
     bull_score = bc.conviction_score if bc else 0
     bear_score = bear.bearish_conviction if bear else 0
+    short_score = sc.conviction_score if sc else 0
     macro_score = mv.macro_favorability if mv else 0
 
     _status(state, (
         f"  Bull conviction: {bull_score}/10 | "
-        f"Bearish conviction: {bear_score}/10 | "
+        f"Short conviction: {short_score}/10 | "
+        f"Risk bearish: {bear_score}/10 | "
         f"Macro favorability: {macro_score}/10"
     ), config)
 
@@ -375,8 +429,8 @@ def mark_debate_skipped(state: dict, config: RunnableConfig) -> dict:
 
 def run_debate_round(state: dict, config: RunnableConfig) -> dict:
     """
-    Execute one debate round: analyst.rebut() and risk_mgr.rebut()
-    in parallel via ThreadPoolExecutor, exactly as v1 does.
+    Execute one debate round: Long Analyst vs Short Analyst (primary debate),
+    plus Risk Manager commentary, in parallel via ThreadPoolExecutor.
     """
     model = _get_model(state, config)
     model = with_temperature(model, get_node_temperature("run_debate_round"))
@@ -388,66 +442,81 @@ def run_debate_round(state: dict, config: RunnableConfig) -> dict:
     if current_round == 1:
         _status(
             state,
-            "Phase 2/3: Adversarial debate — agents challenging each other...",
+            "Phase 2/3: Adversarial debate — Long vs Short analysts...",
             config,
         )
 
     _status(state, f"  Debate round {current_round}/{max_rounds}...", config)
 
-    analyst = SectorAnalystAgent(model=model)
+    long_analyst = SectorAnalystAgent(model=model)
+    short_analyst = ShortAnalystAgent(model=model)
     risk_mgr = RiskManagerAgent(model=model)
 
     bull_case = state["bull_case"]
     bear_case = state["bear_case"]
+    short_case = state.get("short_case")
 
-    analyst_rebuttal = None
+    long_rebuttal = None
+    short_rebuttal = None
     risk_rebuttal = None
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        analyst_future = executor.submit(
-            analyst.rebut, state["ticker"], bear_case, bull_case
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # Primary debate: Long vs Short
+        long_future = executor.submit(
+            long_analyst.rebut, state["ticker"],
+            short_case if short_case else bear_case, bull_case
         )
+        short_future = executor.submit(
+            short_analyst.rebut, state["ticker"],
+            bull_case, short_case if short_case else ShortCase(ticker=state["ticker"])
+        ) if short_case else None
+        # Risk Manager provides sizing commentary
         risk_future = executor.submit(
             risk_mgr.rebut, state["ticker"], bull_case, bear_case
         )
 
         try:
-            analyst_rebuttal = analyst_future.result()
+            long_rebuttal = long_future.result()
         except Exception as e:
-            logger.warning(f"Analyst rebuttal failed: {e}")
+            logger.warning(f"Long analyst rebuttal failed: {e}")
+        if short_future:
+            try:
+                short_rebuttal = short_future.result()
+            except Exception as e:
+                logger.warning(f"Short analyst rebuttal failed: {e}")
         try:
             risk_rebuttal = risk_future.result()
         except Exception as e:
             logger.warning(f"Risk rebuttal failed: {e}")
 
     # Build conviction timeline entries for post-debate
-    # Look up initial scores for delta computation in rationale
     bull_initial = bull_case.conviction_score if bull_case else None
-    bear_initial = bear_case.bearish_conviction if bear_case else None
+    short_initial = short_case.conviction_score if short_case else None
 
     round_label = f"Debate Round {current_round}" if max_rounds > 1 else "Post-Debate"
 
     timeline_entries: list[ConvictionSnapshot] = []
-    if analyst_rebuttal and analyst_rebuttal.revised_conviction is not None:
+    if long_rebuttal and long_rebuttal.revised_conviction is not None:
         timeline_entries.append(ConvictionSnapshot(
             phase=round_label,
-            agent="Sector Analyst",
-            score=analyst_rebuttal.revised_conviction,
+            agent="Long Analyst",
+            score=long_rebuttal.revised_conviction,
             score_type="conviction",
-            rationale=_debate_rationale(analyst_rebuttal, "Sector Analyst", bull_initial),
+            rationale=_debate_rationale(long_rebuttal, "Long Analyst", bull_initial),
         ))
-    if risk_rebuttal and risk_rebuttal.revised_conviction is not None:
+    if short_rebuttal and short_rebuttal.revised_conviction is not None:
         timeline_entries.append(ConvictionSnapshot(
             phase=round_label,
-            agent="Risk Manager",
-            score=risk_rebuttal.revised_conviction,
+            agent="Short Analyst",
+            score=short_rebuttal.revised_conviction,
             score_type="bearish",
-            rationale=_debate_rationale(risk_rebuttal, "Risk Manager", bear_initial),
+            rationale=_debate_rationale(short_rebuttal, "Short Analyst", short_initial),
         ))
 
     update: dict[str, Any] = {
         "debate_round": current_round,
-        "analyst_rebuttal": analyst_rebuttal,
+        "long_rebuttal": long_rebuttal,
+        "short_rebuttal": short_rebuttal,
         "risk_rebuttal": risk_rebuttal,
     }
 
@@ -463,15 +532,15 @@ def run_debate_round(state: dict, config: RunnableConfig) -> dict:
 
 def report_debate_complete(state: dict, config: RunnableConfig) -> dict:
     """Log debate completion and note convergence if applicable."""
-    ar = state.get("analyst_rebuttal")
-    rr = state.get("risk_rebuttal")
+    lr = state.get("long_rebuttal")
+    sr = state.get("short_rebuttal")
 
     _status(state, (
         f"  Debate complete | "
-        f"Analyst revised conviction: "
-        f"{ar.revised_conviction if ar else 'N/A'} | "
-        f"Risk Mgr revised bearish conviction: "
-        f"{rr.revised_conviction if rr else 'N/A'}"
+        f"Long Analyst revised conviction: "
+        f"{lr.revised_conviction if lr else 'N/A'} | "
+        f"Short Analyst revised conviction: "
+        f"{sr.revised_conviction if sr else 'N/A'}"
     ), config)
 
     # Note convergence for informational display (debate still ran)
@@ -567,15 +636,20 @@ def run_portfolio_manager(state: dict, config: RunnableConfig) -> dict:
     except Exception as e:
         logger.debug(f"Session memory unavailable: {e}")
 
-    # Assemble PM context exactly as v1 does, plus Phase C additions
+    # Assemble PM context with all 5 agents' outputs, plus Phase C additions
     pm_context: dict[str, Any] = {
         "bull_case": state["bull_case"],
         "bear_case": state["bear_case"],
+        "short_case": state.get("short_case"),
         "macro_view": state.get("macro_view"),
         "debate": {
-            "analyst_rebuttal": (
-                state["analyst_rebuttal"].model_dump()
-                if state.get("analyst_rebuttal") else {}
+            "long_rebuttal": (
+                state["long_rebuttal"].model_dump()
+                if state.get("long_rebuttal") else {}
+            ),
+            "short_rebuttal": (
+                state["short_rebuttal"].model_dump()
+                if state.get("short_rebuttal") else {}
             ),
             "risk_rebuttal": (
                 state["risk_rebuttal"].model_dump()

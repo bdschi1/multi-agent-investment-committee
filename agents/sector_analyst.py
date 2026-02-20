@@ -1,9 +1,13 @@
 """
-Sector Analyst Agent — builds the bull case.
+Sector Analyst Agent (Long Analyst) — builds the bull case.
 
 This agent acts as a senior equity analyst constructing a buy thesis.
 It gathers fundamental data, identifies catalysts, and builds a
 conviction-scored investment case.
+
+v4.0: Display label updated to "Long Analyst". Class name and file name
+preserved for backward compatibility. rebut() now responds to the
+Short Analyst's ShortCase instead of the Risk Manager's BearCase.
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class SectorAnalystAgent(BaseInvestmentAgent):
-    """Bull-case agent: builds the affirmative investment thesis."""
+    """Long Analyst (bull-case agent): builds the affirmative investment thesis."""
 
     def __init__(self, model: Any, tool_registry: Any = None):
         super().__init__(model=model, role=AgentRole.SECTOR_ANALYST, tool_registry=tool_registry)
@@ -323,27 +327,27 @@ Be honest and self-critical."""
         return response if isinstance(response, str) else str(response)
 
     def rebut(self, ticker: str, opposing_view: Any, own_result: Any) -> Rebuttal:
-        """Respond to the Risk Manager's bear case."""
+        """Respond to the Short Analyst's short case."""
         bull_case = own_result if isinstance(own_result, BullCase) else own_result
-        bear_case = opposing_view
+        short_case = opposing_view
 
-        prompt = f"""You are the Sector Analyst for {ticker}. The Risk Manager has presented
-their bear case. You must REBUT their analysis.
+        prompt = f"""You are the Long Analyst for {ticker}. The Short Analyst has presented
+their short case. You must REBUT their analysis and defend your bull thesis.
 
 YOUR BULL CASE:
 Thesis: {bull_case.thesis}
 Conviction: {bull_case.conviction_score}/10
 
-RISK MANAGER'S BEAR CASE:
-Risks: {bear_case.risks if hasattr(bear_case, 'risks') else bear_case.get('risks', [])}
-2nd Order Effects: {bear_case.second_order_effects if hasattr(bear_case, 'second_order_effects') else bear_case.get('second_order_effects', [])}
-3rd Order Effects: {bear_case.third_order_effects if hasattr(bear_case, 'third_order_effects') else bear_case.get('third_order_effects', [])}
-Bearish Conviction: {bear_case.bearish_conviction if hasattr(bear_case, 'bearish_conviction') else bear_case.get('bearish_conviction', 'N/A')}
+SHORT ANALYST'S CASE:
+Short Thesis: {short_case.short_thesis if hasattr(short_case, 'short_thesis') else short_case.get('short_thesis', '')}
+Thesis Type: {short_case.thesis_type if hasattr(short_case, 'thesis_type') else short_case.get('thesis_type', '')}
+Event Path: {short_case.event_path if hasattr(short_case, 'event_path') else short_case.get('event_path', [])}
+Short Conviction: {short_case.conviction_score if hasattr(short_case, 'conviction_score') else short_case.get('conviction_score', 'N/A')}
 
 Respond in valid JSON:
 {{
     "points": ["rebuttal point 1", "rebuttal point 2", ...],
-    "concessions": ["point where you agree with risk manager", ...],
+    "concessions": ["point where you agree with short analyst", ...],
     "revised_conviction": 7.0
 }}
 
@@ -357,14 +361,14 @@ Respond ONLY with the JSON object."""
             parsed, _ = extract_json(response_text)
             return Rebuttal(
                 agent_role=AgentRole.SECTOR_ANALYST,
-                responding_to=AgentRole.RISK_MANAGER,
+                responding_to=AgentRole.SHORT_ANALYST,
                 **parsed,
             )
         except Exception as e:
             logger.warning(f"Failed to parse rebuttal JSON: {e}")
             return Rebuttal(
                 agent_role=AgentRole.SECTOR_ANALYST,
-                responding_to=AgentRole.RISK_MANAGER,
+                responding_to=AgentRole.SHORT_ANALYST,
                 points=["Rebuttal generated but structured parsing failed"],
                 concessions=[],
             )

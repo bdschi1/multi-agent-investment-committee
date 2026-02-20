@@ -39,6 +39,7 @@ _DEFAULT_TASK_TEMPERATURES: dict[str, float] = {
     "gather_data": 0.1,
     # Phase 1: parallel analysis
     "run_sector_analyst": 0.5,
+    "run_short_analyst": 0.5,
     "run_risk_manager": 0.5,
     "run_macro_analyst": 0.5,
     # Phase 1 reporters (no LLM calls, but included for completeness)

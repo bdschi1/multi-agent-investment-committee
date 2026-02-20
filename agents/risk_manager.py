@@ -1,9 +1,14 @@
 """
-Risk Manager Agent — builds the bear case with 2nd and 3rd order effects.
+Risk Manager Agent — risk assessment with sizing/structuring focus.
 
-This agent acts as a senior risk manager / devil's advocate, identifying
-what could go wrong and tracing cascading consequences that most
-analysts miss.
+v4.0: The Risk Manager no longer generates short theses (that's now the
+Short Analyst's job). Instead, the Risk Manager focuses on:
+- Position structure recommendation (outright, hedged, paired, options_overlay)
+- Stop-loss levels
+- Max risk allocation in risk units
+- Stress scenario analysis
+- Correlation/crowding flags
+- 2nd and 3rd order risk effects
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class RiskManagerAgent(BaseInvestmentAgent):
-    """Bear-case agent: adversarial risk analysis with cascading effects."""
+    """Risk assessment agent: sizing, structuring, and stress testing."""
 
     def __init__(self, model: Any, tool_registry: Any = None):
         super().__init__(model=model, role=AgentRole.RISK_MANAGER, tool_registry=tool_registry)
@@ -189,7 +194,7 @@ XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — use for risk identificat
 {narrative}{pfd_warning}
 """
 
-        prompt = f"""You are executing your risk analysis for {ticker}. BUILD THE BEAR CASE.
+        prompt = f"""You are executing your risk analysis for {ticker}. BUILD THE RISK ASSESSMENT.
 
 Your analysis plan:
 {plan}
@@ -198,24 +203,33 @@ Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
 {expert_section}{kb_section}{tool_data_section}{xai_section}
-Produce a STRUCTURED bear case. Think in CAUSAL CHAINS for 2nd/3rd order effects.
+Produce a STRUCTURED risk assessment with SIZING AND STRUCTURING recommendations.
+Think in CAUSAL CHAINS for 2nd/3rd order effects.
 
-IMPORTANT: Your output should NOT default to "avoid/no position." If the data supports it,
-produce an ACTIVE SHORT PITCH — a real alpha-generating short thesis that a fund would trade.
-Consider: Is this stock overvalued? Is the narrative ahead of fundamentals? Are there
-accounting risks, competitive threats, or secular declines that make this a short candidate?
+NOTE: You are NOT generating a short thesis — that is the Short Analyst's job.
+Your role is to ASSESS RISKS, RECOMMEND POSITION STRUCTURE, SET STOP-LOSS LEVELS,
+and RUN STRESS SCENARIOS. You are the risk guardian, not the short seller.
 
 VARIANT VIEW REQUIREMENT:
 - State what the CONSENSUS BEAR CASE is (what most bears worry about), then go DEEPER.
 - Your best risks should be NON-OBVIOUS — things the market is underpricing.
 - Avoid lazy risk points ("macro headwinds", "competition"). Be specific: which macro factor,
   which competitor, what mechanism, what timeline.
-- The best bear cases find asymmetry: risks with high impact but low market pricing.
+- The best risk assessments find asymmetry: risks with high impact but low market pricing.
 
-Also include TECHNICAL ANALYSIS:
-- Recent price action vs. 50-day and 200-day moving averages
-- Key support/resistance levels and potential breakdown triggers
-- Relative performance vs. sector and market over 1m/3m/6m
+SIZING & STRUCTURING (your PRIMARY v4 deliverable):
+- POSITION STRUCTURE: Should this be outright, hedged, paired, or options_overlay?
+  Why does the risk profile favor one structure over another?
+- STOP-LOSS LEVEL: At what specific price level should the position be cut?
+  Reference technical levels, fundamental thresholds, or time-based stops.
+- MAX RISK ALLOCATION: How many risk units (1-10 scale) should this consume?
+  What is the maximum allocation given the risk profile?
+- STRESS SCENARIOS: Run 2-3 stress tests:
+  - Rates +100bps scenario: P&L impact
+  - Sector -15% scenario: P&L impact
+  - Company-specific stress (earnings miss, guidance cut): P&L impact
+- CORRELATION FLAGS: Is this position crowded? Are correlations elevated with
+  other positions in the book? Flag any crowding or correlation warnings.
 
 RETURN DECOMPOSITION CHALLENGE (heuristic reasoning — not precise computation):
 - If a bull thesis claims alpha, challenge the decomposition: how much of the
@@ -225,8 +239,6 @@ RETURN DECOMPOSITION CHALLENGE (heuristic reasoning — not precise computation)
 - FLAG factor-masquerading-as-alpha: if the stock's returns decompose mostly into
   momentum, value, or quality factors, the "alpha" can be replicated with cheaper
   factor ETFs. The active position doesn't add value — it adds risk.
-- For short theses: estimate the heuristic Sharpe using (-1 × expected return) / vol.
-  A short with Sharpe > 0.5 is actionable; below that, the risk may not justify the carry cost.
 
 Example of causal chain thinking:
   Risk: "Rising interest rates"
@@ -248,19 +260,18 @@ Respond in valid JSON matching this exact schema:
     "worst_case_scenario": "Narrative description of how things could compound",
     "bearish_conviction": 6.5,
     "key_vulnerabilities": {{"area": "description"}},
-    "short_thesis": "If warranted: 1-2 sentence active short pitch. If not warranted, leave empty.",
-    "actionable_recommendation": "AVOID or UNDERWEIGHT or ACTIVE SHORT or HEDGE",
-    "technical_levels": {{
-        "current_vs_50dma": "above/below by X%",
-        "current_vs_200dma": "above/below by X%",
-        "key_support": "$XXX",
-        "key_resistance": "$XXX",
-        "breakdown_trigger": "$XXX — if breached, indicates..."
-    }}
+    "position_structure": "outright / hedged / paired / options_overlay — rationale",
+    "stop_loss_level": "$XXX — rationale (e.g. '3-day close below 200 DMA' or '15% from entry')",
+    "max_risk_allocation": "X risk units — rationale",
+    "stress_scenarios": [
+        {{"scenario": "Rates +100bps", "pnl_impact": "-X% on position"}},
+        {{"scenario": "Sector -15%", "pnl_impact": "-X% on position"}},
+        {{"scenario": "Earnings miss by 10%", "pnl_impact": "-X% on position"}}
+    ],
+    "correlation_flags": ["Crowding warning: X% of float shorted", "High correlation with Y position"]
 }}
 
-bearish_conviction: 0-10 scale (0 = minimal concern, 10 = maximum bearish conviction — you are certain this is a bad investment)
-actionable_recommendation: Choose the most appropriate — don't default to AVOID if ACTIVE SHORT is warranted.
+bearish_conviction: 0-10 scale (0 = minimal concern, 10 = maximum bearish conviction)
 
 Be specific. Use numbers. Trace the causal chains.
 Respond ONLY with the JSON object, no other text."""
@@ -323,33 +334,28 @@ it's about being accurately pessimistic."""
         return response if isinstance(response, str) else str(response)
 
     def rebut(self, ticker: str, opposing_view: Any, own_result: Any) -> Rebuttal:
-        """Respond to the Sector Analyst's bull case."""
+        """Provide sizing/structuring commentary on the debate between Long and Short analysts."""
         bear_case = own_result if isinstance(own_result, BearCase) else own_result
-        bull_case = opposing_view
 
-        prompt = f"""You are the Risk Manager for {ticker}. The Sector Analyst has presented
-their bull case. You must CHALLENGE their analysis.
+        # opposing_view may be bull_case or short_case depending on context
+        prompt = f"""You are the Risk Manager for {ticker}. The Long and Short analysts have debated.
+You provide SIZING AND STRUCTURING COMMENTARY — not a thesis debate.
 
-SECTOR ANALYST'S BULL CASE:
-Thesis: {bull_case.thesis if hasattr(bull_case, 'thesis') else bull_case.get('thesis', '')}
-Evidence: {bull_case.supporting_evidence if hasattr(bull_case, 'supporting_evidence') else bull_case.get('supporting_evidence', [])}
-Catalysts: {bull_case.catalysts if hasattr(bull_case, 'catalysts') else bull_case.get('catalysts', [])}
-Conviction: {bull_case.conviction_score if hasattr(bull_case, 'conviction_score') else bull_case.get('conviction_score', 'N/A')}
+YOUR RISK ASSESSMENT:
+Bearish Conviction: {bear_case.bearish_conviction if hasattr(bear_case, 'bearish_conviction') else bear_case.get('bearish_conviction', 'N/A')}/10
+Key Risks: {bear_case.risks if hasattr(bear_case, 'risks') else bear_case.get('risks', [])}
+Position Structure: {bear_case.position_structure if hasattr(bear_case, 'position_structure') else bear_case.get('position_structure', 'N/A')}
 
-YOUR BEAR CASE:
-Bearish Conviction: {bear_case.bearish_conviction}/10
-Key Risks: {bear_case.risks}
+Based on the debate so far, provide your risk sizing feedback:
 
 Respond in valid JSON:
 {{
-    "points": ["challenge point 1", "challenge point 2", ...],
-    "concessions": ["point where analyst makes a fair argument", ...],
+    "points": ["sizing/structuring commentary point 1", "risk sizing feedback 2", ...],
+    "concessions": ["where the analysts' debate revealed useful risk info", ...],
     "revised_conviction": 6.5
 }}
 
-revised_conviction is YOUR bearish conviction after considering the bull case (0-10, where 10 = maximum bearish conviction).
-
-Be rigorous but fair — acknowledge strong bull points, but press on the weaknesses.
+revised_conviction is YOUR bearish conviction (0-10). Focus on RISK MANAGEMENT, not thesis debate.
 Respond ONLY with the JSON object."""
 
         response = self.model(prompt)

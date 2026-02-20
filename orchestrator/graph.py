@@ -7,7 +7,7 @@ but now with conditional edges (debate loop) and parallel fan-out
 via Send.  Debate always runs (convergence is noted, not skipped).
 
 Graph topology (full pipeline):
-    START → gather_data → run_xai_analysis → [Send 3 analysts] → report_phase1
+    START → gather_data → run_xai_analysis → [Send 4 analysts] → report_phase1
                                                                        │
                                                                run_debate_round ◄──┐
                                                                    │                │
@@ -46,9 +46,10 @@ from xai.node import run_xai_analysis
 # ---------------------------------------------------------------------------
 
 def _fan_out_analysts(state: CommitteeState) -> list[Send]:
-    """Route from gather_data to 3 parallel analyst nodes."""
+    """Route from gather_data to 4 parallel analyst nodes."""
     return [
         Send("run_sector_analyst", state),
+        Send("run_short_analyst", state),
         Send("run_risk_manager", state),
         Send("run_macro_analyst", state),
     ]
@@ -92,6 +93,7 @@ def build_graph() -> Any:
     graph.add_node("gather_data", nodes.gather_data)
     graph.add_node("run_xai_analysis", run_xai_analysis)
     graph.add_node("run_sector_analyst", nodes.run_sector_analyst)
+    graph.add_node("run_short_analyst", nodes.run_short_analyst)
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
     graph.add_node("report_phase1", nodes.report_phase1)
@@ -108,15 +110,16 @@ def build_graph() -> Any:
     # ── XAI pre-screen between gather_data and analysts ──
     graph.add_edge("gather_data", "run_xai_analysis")
 
-    # ── Fan-out to 3 parallel analysts ──
+    # ── Fan-out to 4 parallel analysts ──
     graph.add_conditional_edges(
         "run_xai_analysis",
         _fan_out_analysts,
-        ["run_sector_analyst", "run_risk_manager", "run_macro_analyst"],
+        ["run_sector_analyst", "run_short_analyst", "run_risk_manager", "run_macro_analyst"],
     )
 
-    # ── Fan-in: all three analyst nodes converge to report_phase1 ──
+    # ── Fan-in: all four analyst nodes converge to report_phase1 ──
     graph.add_edge("run_sector_analyst", "report_phase1")
+    graph.add_edge("run_short_analyst", "report_phase1")
     graph.add_edge("run_risk_manager", "report_phase1")
     graph.add_edge("run_macro_analyst", "report_phase1")
 
@@ -172,6 +175,7 @@ def build_graph_phase1() -> Any:
     graph.add_node("gather_data", nodes.gather_data)
     graph.add_node("run_xai_analysis", run_xai_analysis)
     graph.add_node("run_sector_analyst", nodes.run_sector_analyst)
+    graph.add_node("run_short_analyst", nodes.run_short_analyst)
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
     graph.add_node("report_phase1", nodes.report_phase1)
@@ -185,15 +189,16 @@ def build_graph_phase1() -> Any:
     # ── XAI pre-screen between gather_data and analysts ──
     graph.add_edge("gather_data", "run_xai_analysis")
 
-    # ── Fan-out to 3 parallel analysts ──
+    # ── Fan-out to 4 parallel analysts ──
     graph.add_conditional_edges(
         "run_xai_analysis",
         _fan_out_analysts,
-        ["run_sector_analyst", "run_risk_manager", "run_macro_analyst"],
+        ["run_sector_analyst", "run_short_analyst", "run_risk_manager", "run_macro_analyst"],
     )
 
     # ── Fan-in ──
     graph.add_edge("run_sector_analyst", "report_phase1")
+    graph.add_edge("run_short_analyst", "report_phase1")
     graph.add_edge("run_risk_manager", "report_phase1")
     graph.add_edge("run_macro_analyst", "report_phase1")
 
@@ -274,8 +279,10 @@ def _state_to_result(state: dict) -> CommitteeResult:
         ticker=state.get("ticker", ""),
         bull_case=state.get("bull_case"),
         bear_case=state.get("bear_case"),
+        short_case=state.get("short_case"),
         macro_view=state.get("macro_view"),
-        analyst_rebuttal=state.get("analyst_rebuttal"),
+        long_rebuttal=state.get("long_rebuttal"),
+        short_rebuttal=state.get("short_rebuttal"),
         risk_rebuttal=state.get("risk_rebuttal"),
         committee_memo=state.get("committee_memo"),
         optimization_result=state.get("optimization_result"),

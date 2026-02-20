@@ -84,8 +84,8 @@ def _extract_text_fields(result: Any) -> str:
                 _collect(item)
 
     for field_name in [
-        "bull_case", "bear_case", "macro_view",
-        "analyst_rebuttal", "risk_rebuttal", "committee_memo",
+        "bull_case", "bear_case", "short_case", "macro_view",
+        "long_rebuttal", "short_rebuttal", "risk_rebuttal", "committee_memo",
     ]:
         obj = getattr(result, field_name, None)
         if obj is not None:
@@ -369,15 +369,18 @@ def _grade_reasoning_quality(result: Any) -> DimensionScore:
         score_parts.append((0.0, "No conviction timeline"))
 
     # 2. Rebuttal substance — non-empty?
-    analyst_reb = getattr(result, "analyst_rebuttal", None)
+    long_reb = getattr(result, "long_rebuttal", None)
+    short_reb = getattr(result, "short_rebuttal", None)
     risk_reb = getattr(result, "risk_rebuttal", None)
     rebuttal_count = 0
-    if analyst_reb and getattr(analyst_reb, "argument", ""):
+    if long_reb and getattr(long_reb, "argument", ""):
+        rebuttal_count += 1
+    if short_reb and getattr(short_reb, "argument", ""):
         rebuttal_count += 1
     if risk_reb and getattr(risk_reb, "argument", ""):
         rebuttal_count += 1
-    if rebuttal_count == 2:
-        score_parts.append((25.0, "Both rebuttals substantive"))
+    if rebuttal_count >= 2:
+        score_parts.append((25.0, f"{rebuttal_count} rebuttals substantive"))
     elif rebuttal_count == 1:
         score_parts.append((15.0, "One rebuttal substantive"))
     else:

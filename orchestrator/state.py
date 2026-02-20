@@ -21,6 +21,7 @@ from agents.base import (
     MacroView,
     ReasoningTrace,
     Rebuttal,
+    ShortCase,
 )
 from orchestrator.committee import ConvictionSnapshot
 
@@ -67,6 +68,7 @@ class CommitteeState(TypedDict, total=False):
     # -- Phase 1: Parallel analyst outputs --
     bull_case: BullCase | None
     bear_case: BearCase | None
+    short_case: ShortCase | None
     macro_view: MacroView | None
 
     # -- Aggregated across parallel branches (need reducers) --
@@ -74,7 +76,8 @@ class CommitteeState(TypedDict, total=False):
     conviction_timeline: Annotated[list[ConvictionSnapshot], operator.add]
 
     # -- Phase 2: Debate --
-    analyst_rebuttal: Rebuttal | None
+    long_rebuttal: Rebuttal | None      # Long Analyst's rebuttal (was analyst_rebuttal)
+    short_rebuttal: Rebuttal | None     # Short Analyst's rebuttal (new)
     risk_rebuttal: Rebuttal | None
     debate_round: int
     debate_skipped: bool

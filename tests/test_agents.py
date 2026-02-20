@@ -11,10 +11,11 @@ import json
 
 import pytest
 
-from agents.base import AgentRole, BearCase, BullCase, CommitteeMemo, Rebuttal
+from agents.base import AgentRole, BearCase, BullCase, CommitteeMemo, Rebuttal, ShortCase
 from agents.portfolio_manager import PortfolioManagerAgent
 from agents.risk_manager import RiskManagerAgent
 from agents.sector_analyst import SectorAnalystAgent
+from agents.short_analyst import ShortAnalystAgent
 
 # ---------------------------------------------------------------------------
 # Mock LLM
@@ -100,6 +101,23 @@ def _mock_memo_json(ticker: str = "TEST") -> str:
     })
 
 
+def _mock_short_json(ticker: str = "TEST") -> str:
+    return json.dumps({
+        "ticker": ticker,
+        "short_thesis": "Overvalued relative to growth rate",
+        "thesis_type": "alpha_short",
+        "event_path": ["Earnings miss", "Guidance cut"],
+        "supporting_evidence": ["Insider selling", "Decelerating growth"],
+        "alpha_vs_beta_assessment": "Mostly idiosyncratic",
+        "borrow_assessment": "Easy borrow, 2% cost",
+        "conviction_score": 6.0,
+        "key_vulnerabilities": {"valuation": "50x forward PE"},
+        "estimated_short_return": "-15%",
+        "idiosyncratic_return": "-10%",
+        "estimated_sharpe": "0.8",
+    })
+
+
 def _mock_rebuttal_json() -> str:
     return json.dumps({
         "points": ["Risk is overstated", "Company has pricing power"],
@@ -159,10 +177,27 @@ class TestSchemas:
         )
         assert memo.recommendation == "BUY"
 
+    def test_short_case_schema(self):
+        sc = ShortCase(
+            ticker="TSLA",
+            short_thesis="Overvalued vs growth",
+            thesis_type="alpha_short",
+            conviction_score=6.0,
+        )
+        assert sc.conviction_score == 6.0
+        assert sc.thesis_type == "alpha_short"
+
+    def test_short_case_conviction_bounds(self):
+        with pytest.raises(ValueError):
+            ShortCase(
+                ticker="X",
+                conviction_score=11.0,  # Out of bounds
+            )
+
     def test_rebuttal_schema(self):
         r = Rebuttal(
             agent_role=AgentRole.SECTOR_ANALYST,
-            responding_to=AgentRole.RISK_MANAGER,
+            responding_to=AgentRole.SHORT_ANALYST,
             points=["Growth offsets risk"],
             concessions=["Regulation is a concern"],
             revised_conviction=7.0,
@@ -191,16 +226,15 @@ class TestSectorAnalyst:
         mock = MockLLM({"rebut": _mock_rebuttal_json()})
         agent = SectorAnalystAgent(model=mock)
 
-        bear = BearCase(
-            ticker="TEST", risks=["risk1"], bearish_conviction=6.0,
-            worst_case_scenario="bad", second_order_effects=[], third_order_effects=[],
+        short = ShortCase(
+            ticker="TEST", short_thesis="Overvalued", conviction_score=6.0,
         )
         bull = BullCase(
             ticker="TEST", thesis="good", conviction_score=8.0,
             time_horizon="1y", supporting_evidence=[], catalysts=[],
         )
 
-        rebuttal = agent.rebut("TEST", bear, bull)
+        rebuttal = agent.rebut("TEST", short, bull)
         assert isinstance(rebuttal, Rebuttal)
         assert rebuttal.agent_role == AgentRole.SECTOR_ANALYST
 
@@ -239,3 +273,33 @@ class TestPortfolioManager:
         result = agent.run("TEST", context)
         assert "output" in result
         assert result["trace"].agent_role == AgentRole.PORTFOLIO_MANAGER
+
+
+class TestShortAnalyst:
+    """Test the Short Analyst agent."""
+
+    def test_full_run(self):
+        mock = MockLLM({"short": _mock_short_json()})
+        agent = ShortAnalystAgent(model=mock)
+        result = agent.run("TEST", {"market_data": {}, "news": []})
+
+        assert "output" in result
+        assert "trace" in result
+        assert result["trace"].agent_role == AgentRole.SHORT_ANALYST
+        assert len(result["trace"].steps) == 4  # think, plan, act, reflect
+
+    def test_rebuttal(self):
+        mock = MockLLM({"rebut": _mock_rebuttal_json()})
+        agent = ShortAnalystAgent(model=mock)
+
+        bull = BullCase(
+            ticker="TEST", thesis="good", conviction_score=8.0,
+            time_horizon="1y", supporting_evidence=[], catalysts=[],
+        )
+        short = ShortCase(
+            ticker="TEST", short_thesis="Overvalued", conviction_score=6.0,
+        )
+
+        rebuttal = agent.rebut("TEST", bull, short)
+        assert isinstance(rebuttal, Rebuttal)
+        assert rebuttal.agent_role == AgentRole.SHORT_ANALYST

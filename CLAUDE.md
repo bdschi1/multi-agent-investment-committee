@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A multi-agent investment committee that runs four AI agents (Sector Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, preceded by an XAI pre-screen with Shapley value explanations, debates bull/bear theses, and produces a structured committee memo with a T signal and Black-Litterman optimized portfolio weights.
+A multi-agent investment committee that runs five AI agents (Long Analyst, Short Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, preceded by an XAI pre-screen with Shapley value explanations, debates long/short theses, and produces a structured committee memo with a T signal and Black-Litterman optimized portfolio weights.
 
 ## Commands
 
@@ -18,7 +18,7 @@ cp .env.example .env  # then add API key(s)
 python app.py                    # Gradio UI at http://localhost:7860
 
 # Tests
-pytest tests/ -v                 # full suite (~358 tests)
+pytest tests/ -v                 # full suite (~432 tests)
 pytest tests/test_optimizer.py -v    # optimizer tests only
 pytest tests/test_xai.py -v         # XAI module tests
 pytest tests/test_temperature.py -v  # temperature routing tests only
@@ -39,13 +39,13 @@ ruff check --fix .
 ### Pipeline Flow (LangGraph StateGraph)
 
 ```
-gather_data → run_xai_analysis → [sector_analyst, risk_manager, macro_analyst] (parallel)
-           → adversarial_debate (conditional, up to N rounds)
+gather_data → run_xai_analysis → [sector_analyst, short_analyst, risk_manager, macro_analyst] (parallel)
+           → adversarial_debate (Long vs Short, up to N rounds)
            → portfolio_manager → optimizer → finalize
 ```
 
-- **Phase 1**: Three analyst agents run in parallel via LangGraph `Send()` fan-out
-- **Phase 2**: Bull (sector) and bear (risk) debate with conviction updates
+- **Phase 1**: Four analyst agents run in parallel via LangGraph `Send()` fan-out (Long, Short, Risk, Macro)
+- **Phase 2**: Long vs Short adversarial debate with Risk Manager sizing commentary
 - **Phase 3**: PM synthesizes all evidence into `CommitteeMemo` with T signal
 - **Phase 4**: Black-Litterman optimizer computes real portfolio weights from PM output
 
@@ -113,7 +113,7 @@ Based on: Sotic & Radovanovic (2024), "Explainable AI in Finance" (doi:10.20935/
 
 - `retry_extract_json()` in `agents/base.py`: re-prompts model with error feedback when initial parse fails
 - Ollama JSON mode: prompt heuristic detection triggers `format: "json"` constraint
-- All 4 agents use retry in their `act()` methods before falling back to defaults
+- All 5 agents use retry in their `act()` methods before falling back to defaults
 
 ## Testing Conventions
 
@@ -122,7 +122,7 @@ Based on: Sotic & Radovanovic (2024), "Explainable AI in Finance" (doi:10.20935/
 - Backtest tests use `tmp_path` fixture for temporary SQLite databases
 - Temperature tests verify kwarg passthrough and graceful fallback
 - XAI tests use mock fundamentals dicts (no API keys needed), 2 XGBoost tests skip if xgboost not installed
-- Run `pytest tests/ -v` — expect ~358 passing, 2 skipped (xgboost optional)
+- Run `pytest tests/ -v` — expect ~432 passing, 0 skipped
 
 ## Settings
 

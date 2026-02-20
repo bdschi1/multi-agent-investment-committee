@@ -114,8 +114,10 @@ class MockResult:
     ticker: str = "NVDA"
     bull_case: Any = None
     bear_case: Any = None
+    short_case: Any = None
     macro_view: Any = None
-    analyst_rebuttal: Any = None
+    long_rebuttal: Any = None
+    short_rebuttal: Any = None
     risk_rebuttal: Any = None
     committee_memo: Any = None
     traces: dict = field(default_factory=dict)
@@ -149,17 +151,20 @@ def _make_result(**overrides) -> MockResult:
         "committee_memo": MockMemo(),
         "bull_case": MockBullCase(),
         "bear_case": MockBearCase(),
-        "analyst_rebuttal": MockRebuttal(),
+        "long_rebuttal": MockRebuttal(),
+        "short_rebuttal": MockRebuttal(),
         "risk_rebuttal": MockRebuttal(),
         "traces": {
             "sector_analyst": MockTrace(),
+            "short_analyst": MockTrace(),
             "risk_manager": MockTrace(),
             "portfolio_manager": MockTrace(),
         },
         "conviction_timeline": [
-            MockConvictionSnapshot(phase="Initial", score=7.0),
-            MockConvictionSnapshot(phase="Post-Debate", score=6.5),
-            MockConvictionSnapshot(phase="PM Decision", score=7.2),
+            MockConvictionSnapshot(phase="Initial", agent="Long Analyst", score=7.0),
+            MockConvictionSnapshot(phase="Initial", agent="Short Analyst", score=4.5),
+            MockConvictionSnapshot(phase="Post-Debate", agent="Long Analyst", score=6.5),
+            MockConvictionSnapshot(phase="PM Decision", agent="Portfolio Manager", score=7.2),
         ],
     }
     defaults.update(overrides)
@@ -352,7 +357,8 @@ class TestGradeReasoningQuality:
 
     def test_no_rebuttals(self):
         result = _make_result(
-            analyst_rebuttal=None,
+            long_rebuttal=None,
+            short_rebuttal=None,
             risk_rebuttal=None,
         )
         score = _grade_reasoning_quality(result)

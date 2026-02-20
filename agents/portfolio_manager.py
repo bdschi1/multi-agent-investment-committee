@@ -34,15 +34,17 @@ class PortfolioManagerAgent(BaseInvestmentAgent):
         super().__init__(model=model, role=AgentRole.PORTFOLIO_MANAGER, tool_registry=tool_registry)
 
     def think(self, ticker: str, context: dict[str, Any]) -> str:
-        """Assess both cases, macro context, and the debate before forming a view."""
+        """Assess all cases, macro context, and the debate before forming a view."""
         bull_case = context.get("bull_case", {})
         bear_case = context.get("bear_case", {})
+        short_case = context.get("short_case", {})
         macro_view = context.get("macro_view", {})
         debate = context.get("debate", {})
 
         # Serialize Pydantic models if needed
         bull_data = bull_case.model_dump() if hasattr(bull_case, "model_dump") else bull_case
         bear_data = bear_case.model_dump() if hasattr(bear_case, "model_dump") else bear_case
+        short_data = short_case.model_dump() if hasattr(short_case, "model_dump") else short_case
         macro_data = macro_view.model_dump() if hasattr(macro_view, "model_dump") else macro_view
 
         user_context = context.get('user_context', '').strip()
@@ -92,15 +94,19 @@ If conviction or recommendation shifted, explain why.
         prompt = f"""You are the Portfolio Manager chairing the investment committee for {ticker}.
 
 You have received:
-1. A BULL CASE from the Sector Analyst
-2. A BEAR CASE from the Risk Manager
-3. A MACRO ENVIRONMENT assessment from the Macro Analyst
-4. Their DEBATE (rebuttals to each other)
+1. A BULL CASE from the Long Analyst
+2. A SHORT CASE from the Short Analyst
+3. A RISK ASSESSMENT from the Risk Manager (sizing/structuring)
+4. A MACRO ENVIRONMENT assessment from the Macro Strategist
+5. The Long/Short DEBATE (rebuttals between long and short analysts)
 
-BULL CASE:
+BULL CASE (Long Analyst):
 {json.dumps(bull_data, indent=2, default=str)}
 
-BEAR CASE:
+SHORT CASE (Short Analyst):
+{json.dumps(short_data, indent=2, default=str)}
+
+RISK ASSESSMENT (Risk Manager — sizing/structuring):
 {json.dumps(bear_data, indent=2, default=str)}
 
 MACRO ENVIRONMENT:
@@ -110,7 +116,7 @@ DEBATE SUMMARY:
 {json.dumps(debate, indent=2, default=str)}
 {expert_section}{kb_section}{guidance_section}{memory_section}
 Now THINK about what you've heard — as a PM who speaks fluently with his trader. Consider:
-1. Where do the analyst and risk manager AGREE? (These are likely reliable conclusions)
+1. Where do the long and short analysts AGREE? (These are likely reliable conclusions)
 2. Where do they DISAGREE? Who has stronger evidence?
 3. What is the quality of reasoning on each side?
 4. How does the MACRO BACKDROP affect the thesis? Does the cycle, rate environment,
@@ -223,11 +229,13 @@ how they weigh evidence. Good traders are precise about triggers and levels — 
         """Synthesize everything into the final committee memo."""
         bull_case = context.get("bull_case", {})
         bear_case = context.get("bear_case", {})
+        short_case = context.get("short_case", {})
         macro_view = context.get("macro_view", {})
         debate = context.get("debate", {})
 
         bull_data = bull_case.model_dump() if hasattr(bull_case, "model_dump") else bull_case
         bear_data = bear_case.model_dump() if hasattr(bear_case, "model_dump") else bear_case
+        short_data = short_case.model_dump() if hasattr(short_case, "model_dump") else short_case
         macro_data = macro_view.model_dump() if hasattr(macro_view, "model_dump") else macro_view
 
         user_context = context.get('user_context', '').strip()
@@ -298,8 +306,9 @@ Consider: how has the investment case evolved? What changed since the last analy
 Your decision framework:
 {plan}
 
-BULL CASE: {json.dumps(bull_data, indent=2, default=str)}
-BEAR CASE: {json.dumps(bear_data, indent=2, default=str)}
+BULL CASE (Long Analyst): {json.dumps(bull_data, indent=2, default=str)}
+SHORT CASE (Short Analyst): {json.dumps(short_data, indent=2, default=str)}
+RISK ASSESSMENT (Risk Manager): {json.dumps(bear_data, indent=2, default=str)}
 MACRO ENVIRONMENT: {json.dumps(macro_data, indent=2, default=str)}
 DEBATE: {json.dumps(debate, indent=2, default=str)}
 {expert_section}{kb_section}{tool_data_section}{xai_section}{guidance_section}{memory_section}
@@ -325,8 +334,13 @@ Produce the INVESTMENT COMMITTEE MEMO. Respond in valid JSON:
     "conviction": 7.0,
     "thesis_summary": "2-3 sentence summary of the final thesis",
     "key_factors": ["factor that drove the decision", ...],
-    "bull_points_accepted": ["bull arguments you found compelling", ...],
-    "bear_points_accepted": ["bear arguments you found compelling", ...],
+    "bull_points_accepted": ["long analyst arguments you found compelling", ...],
+    "bear_points_accepted": ["risk manager arguments you found compelling", ...],
+    "short_points_accepted": ["short analyst arguments you found compelling", ...],
+    "conviction_change_map": [
+        {{"event": "earnings report", "agent": "Long Analyst", "direction": "up", "magnitude": "+1.5 conviction"}},
+        {{"event": "rates decision", "agent": "Short Analyst", "direction": "down", "magnitude": "-1.0 conviction"}}
+    ],
     "dissenting_points": ["points where you overruled one side and why", ...],
     "risk_mitigants": ["what you'd require to manage downside", ...],
     "time_horizon": "e.g. 6-12 months",

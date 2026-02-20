@@ -26,20 +26,22 @@ class _Snap:
 
 
 def _make_full_timeline() -> list[_Snap]:
-    """Standard 3 initial + 2 debate + 1 PM timeline."""
+    """Standard 4 initial + 2 debate + 1 PM timeline."""
     return [
-        # Initial Analysis (3 agents)
-        _Snap("Initial Analysis", "Sector Analyst", 7.5, "conviction",
+        # Initial Analysis (4 agents)
+        _Snap("Initial Analysis", "Long Analyst", 7.5, "conviction",
               "Strong revenue growth, expanding TAM"),
+        _Snap("Initial Analysis", "Short Analyst", 4.5, "bearish",
+              "Overvalued relative to growth rate"),
         _Snap("Initial Analysis", "Risk Manager", 6.0, "bearish",
               "Elevated valuation, margin risk"),
         _Snap("Initial Analysis", "Macro Analyst", 6.5, "favorability",
               "Neutral macro, benign rates"),
         # Debate Round 1
-        _Snap("Debate Round 1", "Sector Analyst", 8.0, "conviction",
+        _Snap("Debate Round 1", "Long Analyst", 8.0, "conviction",
               "Rebutted margin concern with operating leverage thesis"),
-        _Snap("Debate Round 1", "Risk Manager", 7.0, "bearish",
-              "Acknowledged leverage but insolvency tail remains"),
+        _Snap("Debate Round 1", "Short Analyst", 5.0, "bearish",
+              "Conceded operating leverage but valuation still stretched"),
         # PM Decision
         _Snap("PM Decision", "Portfolio Manager", 7.8, "conviction",
               "Overweight — asymmetric upside from product cycle"),
@@ -66,14 +68,15 @@ class TestTrajectoryChart:
     def test_trace_count(self):
         timeline = _make_full_timeline()
         fig = build_conviction_trajectory(timeline, "NVDA")
-        # 4 agents → 4 traces
-        assert len(fig.data) == 4
+        # 5 agents → 5 traces
+        assert len(fig.data) == 5
 
     def test_agent_names_in_traces(self):
         timeline = _make_full_timeline()
         fig = build_conviction_trajectory(timeline, "NVDA")
         trace_names = {t.name for t in fig.data}
-        assert "Sector Analyst" in trace_names
+        assert "Long Analyst" in trace_names
+        assert "Short Analyst" in trace_names
         assert "Risk Manager" in trace_names
         assert "Macro Analyst" in trace_names
         assert "Portfolio Manager" in trace_names
@@ -164,14 +167,15 @@ class TestGroupByAgent:
     def test_groups_correctly(self):
         timeline = _make_full_timeline()
         groups = _group_by_agent(timeline)
-        assert len(groups["Sector Analyst"]) == 2  # Initial + Debate
-        assert len(groups["Risk Manager"]) == 2
+        assert len(groups["Long Analyst"]) == 2  # Initial + Debate
+        assert len(groups["Short Analyst"]) == 2  # Initial + Debate
+        assert len(groups["Risk Manager"]) == 1
         assert len(groups["Macro Analyst"]) == 1
         assert len(groups["Portfolio Manager"]) == 1
 
     def test_phases_sorted_chronologically(self):
         timeline = _make_full_timeline()
         groups = _group_by_agent(timeline)
-        sa = groups["Sector Analyst"]
+        sa = groups["Long Analyst"]
         assert sa[0].phase == "Initial Analysis"
         assert sa[1].phase == "Debate Round 1"

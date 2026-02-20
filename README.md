@@ -18,14 +18,15 @@ tags:
   - black-litterman
   - explainable-ai
   - shapley-values
+  - long-short
 ---
 
 # Multi-Agent Investment Committee
 
-Four AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — preceded by an XAI pre-screen with Shapley value explanations and validated by a real Black-Litterman portfolio optimizer.
+Five AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — preceded by an XAI pre-screen with Shapley value explanations and validated by a real Black-Litterman portfolio optimizer.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-432%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
@@ -38,12 +39,13 @@ The pipeline runs in six phases:
 
 1. **XAI Pre-Screen** -- Before any LLM calls, a quantitative pre-screen estimates the Probability of Financial Distress (PFD) using an Altman Z-Score model (or optional trained XGBoost), computes risk-adjusted expected return, and identifies the top risk/return drivers via Shapley value decomposition. This creates **dual explainability**: feature-level Shapley (quantitative) + agent-level attribution (qualitative).
 
-2. **Parallel Analysis** -- Three agents analyze the same ticker simultaneously, with XAI context injected:
-   - **Sector Analyst** (bull case) -- sentiment extraction, return decomposition, catalyst identification
-   - **Risk Manager** (bear case) -- causal chain reasoning (1st/2nd/3rd order effects), alpha challenge
+2. **Parallel Analysis** -- Four agents analyze the same ticker simultaneously, with XAI context injected:
+   - **Long Analyst** (bull case) -- sentiment extraction, return decomposition, catalyst identification
+   - **Short Analyst** (short case) -- alpha vs. beta short classification, borrow assessment, event path
+   - **Risk Manager** (sizing/structuring) -- position structure, stop-loss levels, stress scenarios, correlation flags
    - **Macro Strategist** (top-down) -- vol regime classification, net exposure, sizing frameworks
 
-3. **Adversarial Debate** -- Bull and bear challenge each other through structured rebuttals. Convictions update based on evidence.
+3. **Adversarial Debate** -- Long and short analysts challenge each other through structured rebuttals. Risk manager provides sizing commentary. Convictions update based on evidence.
 
 4. **PM Synthesis** -- Portfolio Manager weighs all evidence, applies sizing heuristics, produces a committee memo with recommendation and T signal.
 
@@ -60,16 +62,17 @@ User Input (ticker + guidance + docs)
        v
   XAI Pre-Screen (PFD, Shapley values, expected return)
        |
-   +---+---+--------+
-   v   v            v
- Sector  Risk     Macro         (XAI context injected)
-Analyst Manager  Strategist
-   |      |          |
-   v      v          |
-  Adversarial        |
-    Debate            |
-       |              |
-       v              v
+   +---+---+---+--------+
+   v   v   v            v
+ Long Short Risk     Macro         (XAI context injected)
+Anlst Anlst Mgr    Strategist
+   |    |    |          |
+   v    v    v          |
+  Adversarial           |
+    Debate              |
+  (L vs S + RM)         |
+       |                |
+       v                v
   Portfolio Manager
   (Synthesis + T Signal)
        |
@@ -83,19 +86,21 @@ Analyst Manager  Strategist
 
 Each agent follows a THINK -> PLAN -> ACT -> REFLECT loop. Every step is captured in a reasoning trace visible in the UI. Each pipeline node runs at a task-appropriate temperature (data extraction: 0.1, analysis: 0.5, PM synthesis: 0.7, math: 0.0).
 
-~20 LLM API calls per analysis. 90-120 seconds wall clock depending on provider.
+~25 LLM API calls per analysis. 90-120 seconds wall clock depending on provider.
 
 ---
 
 ## Agents
 
-**Sector Analyst** -- Builds the bull case. Extracts per-headline sentiment (bullish/bearish/neutral with signal strength). Decomposes expected return into industry return and idiosyncratic alpha. Estimates heuristic Sharpe and Sortino ratios.
+**Long Analyst** (`sector_analyst.py`) -- Builds the bull case. Extracts per-headline sentiment (bullish/bearish/neutral with signal strength). Decomposes expected return into industry return and idiosyncratic alpha. Estimates heuristic Sharpe and Sortino ratios. Debates the Short Analyst.
 
-**Risk Manager** -- Builds the bear case. Traces how primary risks cascade into 2nd and 3rd order effects. Challenges whether claimed alpha is genuine idiosyncratic return or disguised factor/sector beta. Produces active short pitches when warranted.
+**Short Analyst** (`short_analyst.py`) -- Independent short-side analysis. Classifies thesis type (alpha short, hedge, pair leg, or no position). Builds event path for the short to work. Decomposes expected short return into systematic vs. idiosyncratic. Assesses borrow cost and liquidity. Debates the Long Analyst.
 
-**Macro Strategist** -- Sets portfolio-level guardrails. Classifies vol regime (low/normal/elevated/crisis). Recommends net exposure direction, sizing method (proportional / risk parity / mean-variance / shrunk mean-variance), and portfolio vol target. The PM operates within these constraints.
+**Risk Manager** (`risk_manager.py`) -- Sizes and structures the position. Traces how primary risks cascade into 2nd and 3rd order effects. Recommends position structure (outright, hedged, paired), stop-loss levels, max risk allocation, and stress scenarios. Flags correlation and crowding risks. Does not generate an independent thesis — stress-tests the long and short theses.
 
-**Portfolio Manager** -- Chairs the committee. Weighs bull thesis, bear risks, macro context, and debate outcomes. Validates return decomposition after hearing both sides. Computes the T signal. Outputs a structured memo with recommendation, sizing rationale, conviction triggers, and factor exposures.
+**Macro Strategist** (`macro_analyst.py`) -- Sets portfolio-level guardrails. Classifies vol regime (low/normal/elevated/crisis). Recommends net exposure direction, sizing method (proportional / risk parity / mean-variance / shrunk mean-variance), and portfolio vol target. Assesses how the position interacts with the existing book.
+
+**Portfolio Manager** (`portfolio_manager.py`) -- Chairs the committee. Weighs bull thesis, short thesis, risk assessment, macro context, and debate outcomes. Produces a conviction change map — for each event, which agent's conviction shifts and by how much. Computes the T signal. Outputs a structured memo with recommendation, sizing rationale, and factor exposures.
 
 ---
 
@@ -225,6 +230,7 @@ Each pipeline node runs at a task-appropriate temperature instead of a single gl
 | `gather_data` | 0.1 | Factual retrieval — one "right" answer |
 | `run_xai_analysis` | 0.0 | Deterministic computation (no LLM calls) |
 | `run_sector_analyst` | 0.5 | Balanced exploration of thesis points |
+| `run_short_analyst` | 0.5 | Explore short thesis scenarios |
 | `run_risk_manager` | 0.5 | Explore unlikely-but-possible tail risks |
 | `run_macro_analyst` | 0.5 | Balanced macro analysis |
 | `run_debate_round` | 0.5 | Adversarial — consider edge arguments |
@@ -310,7 +316,7 @@ python app.py
 ### Test
 
 ```bash
-pytest tests/ -v   # 358 tests
+pytest tests/ -v   # 432 tests
 ```
 
 ---
@@ -348,10 +354,11 @@ multi-agent-investment-committee/
 ├── app.py                       # Gradio UI + report formatting
 ├── agents/
 │   ├── base.py                  # BaseAgent ABC + schemas + JSON extraction
-│   ├── sector_analyst.py        # Bull case + sentiment
-│   ├── risk_manager.py          # Bear case + causal chains
-│   ├── macro_analyst.py         # Macro context + portfolio strategy
-│   └── portfolio_manager.py     # PM synthesis + T signal
+│   ├── sector_analyst.py        # Long Analyst — bull case + sentiment
+│   ├── short_analyst.py         # Short Analyst — short thesis + alpha/beta classification
+│   ├── risk_manager.py          # Risk Manager — sizing, structuring, stress scenarios
+│   ├── macro_analyst.py         # Macro Strategist — portfolio context + vol regime
+│   └── portfolio_manager.py     # PM synthesis + conviction change map + T signal
 ├── orchestrator/
 │   ├── graph.py                 # LangGraph StateGraph (full + phase1 + phase2)
 │   ├── nodes.py                 # Node functions + T signal computation
@@ -414,7 +421,7 @@ multi-agent-investment-committee/
 │   └── models.py                # Request/response Pydantic models
 ├── config/
 │   └── settings.py              # Pydantic settings with .env + per-node temperature overrides + XAI config
-├── tests/                       # 358 tests
+├── tests/                       # 432 tests
 ├── .env.example                 # Environment variable template
 ├── CHANGELOG.md                 # Version history
 └── pyproject.toml
@@ -425,12 +432,12 @@ multi-agent-investment-committee/
 ## Tech Stack
 
 - [LangGraph](https://github.com/langchain-ai/langgraph) -- StateGraph orchestration with fan-out/fan-in and conditional edges
-- [Gradio](https://www.gradio.app/) -- UI with 8 analysis tabs, T signal gauge, document upload
+- [Gradio](https://www.gradio.app/) -- UI with 10 analysis tabs, T signal gauge, document upload
 - [Pydantic](https://docs.pydantic.dev/) -- Output validation for all agent schemas
 - [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) -- Black-Litterman model, efficient frontier, covariance shrinkage
 - [FastAPI](https://fastapi.tiangolo.com/) -- REST API for programmatic access
 - [yfinance](https://github.com/ranaroussi/yfinance) -- Market data
-- [pytest](https://docs.pytest.org/) -- 358 tests with mock LLM fixtures
+- [pytest](https://docs.pytest.org/) -- 432 tests with mock LLM fixtures
 - [SHAP](https://github.com/shap/shap) -- Shapley value explanations (optional; built-in fallback included)
 - [XGBoost](https://xgboost.readthedocs.io/) -- Optional trained distress model (Altman Z-Score always available)
 
@@ -452,6 +459,7 @@ LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
 - v3.7: Black-Litterman portfolio optimizer, per-node temperature routing
 - v3.8: Signal persistence (SQLite), historical backtesting, calibration analysis, alpha decay, benchmark comparison, multi-asset portfolio, explainability/attribution, FastAPI REST endpoint, structured output hardening (retry + Ollama JSON mode)
 - v3.9: XAI pre-screen module — Altman Z-Score/XGBoost distress estimation, built-in Shapley value decomposition (exact linear + permutation-based), expected return computation, dual explainability (feature-level + agent-level). Based on Sotic & Radovanovic (2024)
+- v4.0: Five-agent architecture — dedicated Short Analyst (alpha/beta short classification, borrow assessment, event path), Risk Manager refocused on sizing/structuring (position structure, stop-loss, stress scenarios, correlation flags), Long vs Short adversarial debate with Risk Manager commentary, PM conviction change map, 4-way parallel fan-out
 
 ---
 

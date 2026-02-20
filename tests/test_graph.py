@@ -28,7 +28,7 @@ class GraphMockLLM:
         self.call_count += 1
         prompt_lower = prompt.lower()
 
-        # Sector Analyst responses
+        # Sector Analyst (Long) responses
         if "build the bull case" in prompt_lower or "bull case" in prompt_lower:
             if "json" in prompt_lower:
                 return json.dumps({
@@ -41,6 +41,20 @@ class GraphMockLLM:
                     "key_metrics": {"pe": 30},
                 })
             return "Thinking about bull case..."
+
+        # Short Analyst responses
+        if "short case" in prompt_lower or "short thesis" in prompt_lower or "short opportunity" in prompt_lower:
+            if "json" in prompt_lower:
+                return json.dumps({
+                    "ticker": "TEST",
+                    "short_thesis": "Overvalued relative to growth",
+                    "thesis_type": "alpha_short",
+                    "event_path": ["Earnings miss", "Guidance cut"],
+                    "supporting_evidence": ["Insider selling"],
+                    "conviction_score": 4.5,
+                    "key_vulnerabilities": {"valuation": "Premium to peers"},
+                })
+            return "Thinking about short case..."
 
         # Risk Manager responses
         if "bear case" in prompt_lower or "risk" in prompt_lower:
@@ -102,6 +116,7 @@ class TestGraphBuild:
         expected = {
             "gather_data",
             "run_sector_analyst",
+            "run_short_analyst",
             "run_risk_manager",
             "run_macro_analyst",
             "report_phase1",
@@ -137,7 +152,7 @@ class TestRunGraph:
         assert result.total_duration_ms > 0
 
     def test_traces_populated(self):
-        """All 4 agent traces should be present."""
+        """All 5 agent traces should be present."""
         mock = GraphMockLLM()
         result = run_graph(
             ticker="TEST",
@@ -147,6 +162,7 @@ class TestRunGraph:
         )
 
         assert "sector_analyst" in result.traces
+        assert "short_analyst" in result.traces
         assert "risk_manager" in result.traces
         assert "macro_analyst" in result.traces
         assert "portfolio_manager" in result.traces
@@ -169,7 +185,7 @@ class TestRunGraph:
         assert any("Committee complete" in s for s in statuses)
 
     def test_conviction_timeline_populated(self):
-        """Should have: 3 initial + debate entries + PM entry."""
+        """Should have: 4 initial + debate entries + PM entry."""
         mock = GraphMockLLM()
         result = run_graph(
             ticker="TEST",
@@ -178,8 +194,8 @@ class TestRunGraph:
             max_debate_rounds=1,
         )
 
-        # At minimum: 3 initial (bull, bear, macro) + 1 PM = 4
-        assert len(result.conviction_timeline) >= 4
+        # At minimum: 4 initial (bull, short, bear, macro) + 1 PM = 5
+        assert len(result.conviction_timeline) >= 5
 
     def test_result_serialization(self):
         """CommitteeResult.to_dict() should work with graph output."""

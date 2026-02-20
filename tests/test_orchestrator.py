@@ -159,7 +159,7 @@ class TestTraceRenderer:
         traces = self._make_trace()
         md = TraceRenderer.to_markdown(traces)
 
-        assert "Sector Analyst" in md
+        assert "Long Analyst (Bull)" in md
         assert "THINK" in md
         assert "ACT" in md
 
@@ -168,7 +168,7 @@ class TestTraceRenderer:
         html = TraceRenderer.to_gradio_accordion(traces)
 
         assert "<details>" in html
-        assert "Sector Analyst" in html
+        assert "Long Analyst (Bull)" in html
 
     def test_summary_stats(self):
         traces = self._make_trace()

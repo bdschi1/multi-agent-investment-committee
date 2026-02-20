@@ -641,6 +641,7 @@ def run_committee_analysis(
         # Format outputs for each tab
         memo_md = _format_committee_memo(result, provider_name)
         bull_md = _format_bull_case(result)
+        short_md = _format_short_case(result)
         bear_md = _format_bear_case(result)
         macro_md = _format_macro_view(result)
         xai_md = _format_xai_analysis(result)
@@ -657,7 +658,7 @@ def run_committee_analysis(
 
         # Generate full report text for copy/download
         full_report = _build_full_report(
-            result, memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+            result, memo_md, bull_md, short_md, bear_md, macro_md, debate_md, conviction_md,
             provider_name, status_md=status_md,
         )
 
@@ -666,7 +667,7 @@ def run_committee_analysis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return (memo_md, bull_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
+        return (memo_md, bull_md, short_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
                 trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
@@ -677,7 +678,7 @@ def run_committee_analysis(
             f"**Error:** {str(e)}\n\n"
             f"Check that your API key is set in `.env` and the provider is available."
         )
-        return error_msg, "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
     finally:
         # Restore original debate rounds
         settings.max_debate_rounds = original_rounds
@@ -861,6 +862,7 @@ def run_phase2_synthesis(
         # Format all outputs
         memo_md = _format_committee_memo(result, provider_name)
         bull_md = _format_bull_case(result)
+        short_md = _format_short_case(result)
         bear_md = _format_bear_case(result)
         macro_md = _format_macro_view(result)
         xai_md = _format_xai_analysis(result)
@@ -876,7 +878,7 @@ def run_phase2_synthesis(
         status_md = _format_status(result, status_messages, provider_name)
 
         full_report = _build_full_report(
-            result, memo_md, bull_md, bear_md, macro_md, debate_md, conviction_md,
+            result, memo_md, bull_md, short_md, bear_md, macro_md, debate_md, conviction_md,
             provider_name, status_md=status_md,
         )
 
@@ -884,13 +886,13 @@ def run_phase2_synthesis(
         with open(export_path, "w") as f:
             f.write(full_report)
 
-        return (memo_md, bull_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
+        return (memo_md, bull_md, short_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
                 trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
 
     except Exception as e:
         logger.exception("Phase 2 failed")
         error_msg = f"## Error\n\n**Error:** {str(e)}"
-        return error_msg, "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
 
 
 # ---------------------------------------------------------------------------
@@ -996,37 +998,42 @@ def _format_macro_preview(state: dict) -> str:
 
 def _format_debate_preview(state: dict) -> str:
     """Compact preview of debate results for HITL review."""
-    ar = state.get("analyst_rebuttal")
+    lr = state.get("long_rebuttal")
+    sr = state.get("short_rebuttal")
     rr = state.get("risk_rebuttal")
 
     lines = ["### Debate Summary"]
 
-    # Note convergence if bull/bear scores were close
+    # Note convergence if bull/short scores were close
     bull = state.get("bull_case")
-    bear = state.get("bear_case")
-    if bull and bear:
-        spread = abs(bull.conviction_score - bear.bearish_conviction)
+    short = state.get("short_case")
+    if bull and short:
+        spread = abs(bull.conviction_score - short.conviction_score)
         if spread < 2.0:
             lines.append(
-                f"\n> **ℹ️ Convergence noted** — spread {spread:.1f} "
-                f"(< 2.0). Agents largely agree."
+                f"\n> **Convergence noted** — spread {spread:.1f} "
+                f"(< 2.0). Long and Short analysts largely agree."
             )
 
-    if ar:
-        if ar.revised_conviction is not None:
-            lines.append(f"\n**Analyst revised conviction:** {ar.revised_conviction}/10")
-        if ar.points:
-            lines.append(f"**Key challenges:** {', '.join(ar.points[:2])}")
-        if ar.concessions:
-            lines.append(f"**Concessions:** {', '.join(ar.concessions[:2])}")
+    if lr:
+        if lr.revised_conviction is not None:
+            lines.append(f"\n**Long Analyst revised conviction:** {lr.revised_conviction}/10")
+        if lr.points:
+            lines.append(f"**Key challenges:** {', '.join(lr.points[:2])}")
+        if lr.concessions:
+            lines.append(f"**Concessions:** {', '.join(lr.concessions[:2])}")
+
+    if sr:
+        if sr.revised_conviction is not None:
+            lines.append(f"\n**Short Analyst revised conviction:** {sr.revised_conviction}/10")
+        if sr.points:
+            lines.append(f"**Key challenges:** {', '.join(sr.points[:2])}")
+        if sr.concessions:
+            lines.append(f"**Concessions:** {', '.join(sr.concessions[:2])}")
 
     if rr:
         if rr.revised_conviction is not None:
             lines.append(f"\n**Risk Mgr revised risk:** {rr.revised_conviction}/10")
-        if rr.points:
-            lines.append(f"**Key challenges:** {', '.join(rr.points[:2])}")
-        if rr.concessions:
-            lines.append(f"**Concessions:** {', '.join(rr.concessions[:2])}")
 
     return "\n".join(lines)
 
@@ -1204,6 +1211,7 @@ def _build_full_report(
     result: CommitteeResult,
     memo_md: str,
     bull_md: str,
+    short_md: str,
     bear_md: str,
     macro_md: str,
     debate_md: str,
@@ -1221,6 +1229,8 @@ def _build_full_report(
         memo_md,
         divider,
         bull_md,
+        divider,
+        short_md,
         divider,
         bear_md,
         divider,
@@ -1698,35 +1708,30 @@ def _format_bull_case(result: CommitteeResult) -> str:
 
 
 def _format_bear_case(result: CommitteeResult) -> str:
-    """Format the risk manager's bear case with tables and short pitch."""
+    """Format the risk manager's bear case with sizing and structuring."""
     bc = result.bear_case
     if not bc:
         return "No bear case generated."
 
-    # Header with actionable recommendation
-    rec_emoji = {
-        "ACTIVE SHORT": "🔴🔴", "SELL": "🔴",
-        "UNDERWEIGHT": "🟠", "HEDGE": "🟡", "AVOID": "⚫",
-    }.get(bc.actionable_recommendation.upper(), "⚫")
-
     lines = [
-        f"# Bear Case: {bc.ticker}",
+        f"# Risk Assessment: {bc.ticker}",
         "",
         "| | |",
         "|---|---|",
         f"| **Bearish Conviction** | {bc.bearish_conviction}/10 |",
-        f"| **Recommendation** | {rec_emoji} {bc.actionable_recommendation} |",
-        "",
     ]
 
-    # Short thesis callout
-    if bc.short_thesis:
-        lines.extend([
-            "## Active Short Thesis",
-            "",
-            f"> **{bc.short_thesis}**",
-            "",
-        ])
+    # Position structure
+    pos_struct = getattr(bc, 'position_structure', '')
+    if pos_struct:
+        lines.append(f"| **Position Structure** | {pos_struct} |")
+    stop_loss = getattr(bc, 'stop_loss_level', '')
+    if stop_loss:
+        lines.append(f"| **Stop-Loss** | {stop_loss} |")
+    max_risk = getattr(bc, 'max_risk_allocation', '')
+    if max_risk:
+        lines.append(f"| **Max Risk Allocation** | {max_risk} |")
+    lines.append("")
 
     # Risks as numbered list
     lines.extend(["## Primary Risks", ""])
@@ -1753,18 +1758,27 @@ def _format_bear_case(result: CommitteeResult) -> str:
         bc.worst_case_scenario,
     ])
 
-    # Technical levels table
-    if bc.technical_levels:
+    # Stress scenarios table
+    stress_scenarios = getattr(bc, 'stress_scenarios', [])
+    if stress_scenarios:
         lines.extend([
             "",
-            "## Technical Levels",
+            "## Stress Scenarios",
             "",
-            "| Level | Value |",
-            "|-------|-------|",
+            "| Scenario | P&L Impact |",
+            "|----------|------------|",
         ])
-        for k, v in bc.technical_levels.items():
-            label = k.replace("_", " ").title()
-            lines.append(f"| {label} | {v} |")
+        for scenario in stress_scenarios:
+            name = scenario.get("scenario", "—")
+            impact = scenario.get("impact", "—")
+            lines.append(f"| {name} | {impact} |")
+
+    # Correlation flags
+    correlation_flags = getattr(bc, 'correlation_flags', [])
+    if correlation_flags:
+        lines.extend(["", "## Correlation / Crowding Flags", ""])
+        for i, flag in enumerate(correlation_flags, 1):
+            lines.append(f"{i}. {flag}")
 
     # Key vulnerabilities
     if bc.key_vulnerabilities:
@@ -1776,6 +1790,85 @@ def _format_bear_case(result: CommitteeResult) -> str:
             "|------|--------------|",
         ])
         for k, v in bc.key_vulnerabilities.items():
+            lines.append(f"| {k} | {v} |")
+
+    return "\n".join(lines)
+
+
+def _format_short_case(result: CommitteeResult) -> str:
+    """Format the short analyst's short case."""
+    sc = result.short_case
+    if not sc:
+        return "No short case generated."
+
+    # Thesis type emoji
+    type_emoji = {
+        "alpha_short": "🎯", "hedge": "🛡️",
+        "pair_leg": "⚖️", "no_position": "⚫",
+    }.get(getattr(sc, 'thesis_type', 'no_position'), "⚫")
+
+    lines = [
+        f"# Short Case: {sc.ticker}",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| **Conviction** | {sc.conviction_score}/10 |",
+        f"| **Thesis Type** | {type_emoji} {getattr(sc, 'thesis_type', 'N/A')} |",
+    ]
+
+    alpha_beta = getattr(sc, 'alpha_vs_beta_assessment', '')
+    if alpha_beta:
+        lines.append(f"| **Alpha vs Beta** | {alpha_beta} |")
+    borrow = getattr(sc, 'borrow_assessment', '')
+    if borrow:
+        lines.append(f"| **Borrow Assessment** | {borrow} |")
+    est_ret = getattr(sc, 'estimated_short_return', '')
+    if est_ret:
+        lines.append(f"| **Est. Short Return** | {est_ret} |")
+    idio_ret = getattr(sc, 'idiosyncratic_return', '')
+    if idio_ret:
+        lines.append(f"| **Idiosyncratic Return** | {idio_ret} |")
+    est_sharpe = getattr(sc, 'estimated_sharpe', '')
+    if est_sharpe:
+        lines.append(f"| **Est. Sharpe** | {est_sharpe} |")
+    lines.append("")
+
+    # Short thesis
+    thesis = getattr(sc, 'short_thesis', '')
+    if thesis:
+        lines.extend([
+            "## Short Thesis",
+            "",
+            thesis,
+            "",
+        ])
+
+    # Event path
+    event_path = getattr(sc, 'event_path', [])
+    if event_path:
+        lines.extend(["## Event Path (ordered)", ""])
+        for i, event in enumerate(event_path, 1):
+            lines.append(f"{i}. {event}")
+        lines.append("")
+
+    # Supporting evidence
+    evidence = getattr(sc, 'supporting_evidence', [])
+    if evidence:
+        lines.extend(["## Supporting Evidence", ""])
+        for i, ev in enumerate(evidence, 1):
+            lines.append(f"{i}. {ev}")
+        lines.append("")
+
+    # Key vulnerabilities
+    vulns = getattr(sc, 'key_vulnerabilities', {})
+    if vulns:
+        lines.extend([
+            "## Key Vulnerabilities",
+            "",
+            "| Area | Vulnerability |",
+            "|------|--------------|",
+        ])
+        for k, v in vulns.items():
             lines.append(f"| {k} | {v} |")
 
     return "\n".join(lines)
@@ -1958,12 +2051,12 @@ def _format_debate(result: CommitteeResult) -> str:
                 "",
             ])
 
-    if result.analyst_rebuttal:
-        ar = result.analyst_rebuttal
+    if result.long_rebuttal:
+        ar = result.long_rebuttal
         lines.extend([
-            "## Sector Analyst's Rebuttal (to Bear Case)",
+            "## Long Analyst's Rebuttal (to Short Case)",
             "",
-            "### Challenges to Risk Manager",
+            "### Challenges to Short Analyst",
             "",
         ])
         for i, point in enumerate(ar.points, 1):
@@ -1975,12 +2068,29 @@ def _format_debate(result: CommitteeResult) -> str:
             lines.append(f"\n**Revised Conviction:** {ar.revised_conviction}/10")
         lines.append("")
 
+    if result.short_rebuttal:
+        sr = result.short_rebuttal
+        lines.extend([
+            "## Short Analyst's Rebuttal (to Bull Case)",
+            "",
+            "### Challenges to Long Analyst",
+            "",
+        ])
+        for i, point in enumerate(sr.points, 1):
+            lines.append(f"{i}. {point}")
+        lines.extend(["", "### Concessions", ""])
+        for con in sr.concessions:
+            lines.append(f"> {con}")
+        if sr.revised_conviction is not None:
+            lines.append(f"\n**Revised Short Conviction:** {sr.revised_conviction}/10")
+        lines.append("")
+
     if result.risk_rebuttal:
         rr = result.risk_rebuttal
         lines.extend([
-            "## Risk Manager's Rebuttal (to Bull Case)",
+            "## Risk Manager's Commentary (Sizing)",
             "",
-            "### Challenges to Analyst",
+            "### Sizing Feedback",
             "",
         ])
         for i, point in enumerate(rr.points, 1):
@@ -2006,7 +2116,9 @@ def _format_conviction_evolution(result: CommitteeResult) -> str:
             return "Final Decision"
         if snap.agent == "Macro Analyst":
             return "Macro Backdrop"
-        return "Bull Case" if snap.score_type == "conviction" else "Bear Case"
+        if snap.agent == "Short Analyst":
+            return "Short Case"
+        return "Bull Case" if snap.score_type == "conviction" else "Risk Assessment"
 
     lines = [
         f"# Conviction Evolution: {result.ticker}",
@@ -2726,10 +2838,13 @@ def build_ui() -> gr.Blocks:
                 memo_output = gr.Markdown(label="Investment Committee Memo")
 
             with gr.TabItem("Bull Case"):
-                bull_output = gr.Markdown(label="Sector Analyst — Bull Case")
+                bull_output = gr.Markdown(label="Long Analyst — Bull Case")
+
+            with gr.TabItem("Short Case"):
+                short_output = gr.Markdown(label="Short Analyst — Short Case")
 
             with gr.TabItem("Bear Case"):
-                bear_output = gr.Markdown(label="Risk Manager — Bear Case")
+                bear_output = gr.Markdown(label="Risk Manager — Risk Assessment")
 
             with gr.TabItem("Macro View"):
                 macro_output = gr.Markdown(label="Macro Analyst — Top-Down Environment")
@@ -2828,7 +2943,7 @@ def build_ui() -> gr.Blocks:
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input,
                     model_dropdown, file_upload],
-            outputs=[memo_output, bull_output, bear_output, macro_output, xai_output,
+            outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
                      report_path_state],
@@ -2905,7 +3020,7 @@ def build_ui() -> gr.Blocks:
         ).then(
             fn=handle_phase2,
             inputs=[intermediate_state, pm_guidance_input, provider_dropdown, model_dropdown],
-            outputs=[memo_output, bull_output, bear_output, macro_output, xai_output,
+            outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
                      report_path_state, review_accordion],

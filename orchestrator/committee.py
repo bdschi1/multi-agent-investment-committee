@@ -24,11 +24,13 @@ from agents.base import (
     MacroView,
     ReasoningTrace,
     Rebuttal,
+    ShortCase,
 )
 from agents.macro_analyst import MacroAnalystAgent
 from agents.portfolio_manager import PortfolioManagerAgent
 from agents.risk_manager import RiskManagerAgent
 from agents.sector_analyst import SectorAnalystAgent
+from agents.short_analyst import ShortAnalystAgent
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -51,8 +53,10 @@ class CommitteeResult:
     ticker: str
     bull_case: BullCase | None = None
     bear_case: BearCase | None = None
+    short_case: ShortCase | None = None
     macro_view: MacroView | None = None
-    analyst_rebuttal: Rebuttal | None = None
+    long_rebuttal: Rebuttal | None = None    # Was analyst_rebuttal
+    short_rebuttal: Rebuttal | None = None   # New
     risk_rebuttal: Rebuttal | None = None
     committee_memo: CommitteeMemo | None = None
     optimization_result: Any | None = None
@@ -69,8 +73,10 @@ class CommitteeResult:
             "ticker": self.ticker,
             "bull_case": self.bull_case.model_dump() if self.bull_case else None,
             "bear_case": self.bear_case.model_dump() if self.bear_case else None,
+            "short_case": self.short_case.model_dump() if self.short_case else None,
             "macro_view": self.macro_view.model_dump() if self.macro_view else None,
-            "analyst_rebuttal": self.analyst_rebuttal.model_dump() if self.analyst_rebuttal else None,
+            "long_rebuttal": self.long_rebuttal.model_dump() if self.long_rebuttal else None,
+            "short_rebuttal": self.short_rebuttal.model_dump() if self.short_rebuttal else None,
             "risk_rebuttal": self.risk_rebuttal.model_dump() if self.risk_rebuttal else None,
             "committee_memo": self.committee_memo.model_dump() if self.committee_memo else None,
             "optimization_result": (
@@ -100,22 +106,23 @@ class InvestmentCommittee:
     """
     Orchestrates the multi-agent investment committee workflow.
 
-    Architecture:
-        ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-        │ Sector       │  │ Risk         │  │ Macro        │
-        │ Analyst      │  │ Manager      │  │ Analyst      │
-        │ (Bull Case)  │  │ (Bear Case)  │  │ (Top-Down)   │
-        └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-               │                  │                  │
-               │  ┌────────────┐  │        ┌────────┘
-               └─►│  DEBATE   │◄─┘        │ (no debate)
-                  │ (Rebuttals)│           │
-                  └─────┬──────┘           │
-                        │                  │
-                  ┌─────▼──────────────────▼──┐
-                  │  Portfolio Manager         │
-                  │  (Synthesis + Macro Ctx)   │
-                  └───────────────────────────┘
+    Architecture (v4 — five agents):
+        ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+        │ Long         │  │ Short        │  │ Risk         │  │ Macro        │
+        │ Analyst      │  │ Analyst      │  │ Manager      │  │ Strategist   │
+        │ (Bull Case)  │  │ (Short Case) │  │ (Sizing)     │  │ (Top-Down)   │
+        └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+               │                  │                  │                  │
+               │  ┌────────────┐  │         ┌───────┘        ┌────────┘
+               └─►│  DEBATE   │◄─┘         │ (commentary)   │ (no debate)
+                  │ Long vs   │             │                │
+                  │ Short     │◄────────────┘                │
+                  └─────┬──────┘                             │
+                        │                                    │
+                  ┌─────▼────────────────────────────────────▼──┐
+                  │  Portfolio Manager                           │
+                  │  (Synthesis + Conviction Change Map)        │
+                  └────────────────────────────────────────────┘
     """
 
     def __init__(self, model: Any):
@@ -127,6 +134,7 @@ class InvestmentCommittee:
         """
         self.model = model
         self.analyst = SectorAnalystAgent(model=model)
+        self.short = ShortAnalystAgent(model=model)
         self.risk_mgr = RiskManagerAgent(model=model)
         self.macro = MacroAnalystAgent(model=model)
         self.pm = PortfolioManagerAgent(model=model)
@@ -184,30 +192,40 @@ class InvestmentCommittee:
                 on_status(msg)
 
         # ── Phase 1: Parallel Analysis ──────────────────────────────
-        status("Phase 1/3: Sector Analyst, Risk Manager, and Macro Analyst analyzing in parallel...")
+        status("Phase 1/3: Long Analyst, Short Analyst, Risk Manager, and Macro Strategist analyzing in parallel...")
 
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             analyst_future = executor.submit(self.analyst.run, ticker, context)
+            short_future = executor.submit(self.short.run, ticker, context)
             risk_future = executor.submit(self.risk_mgr.run, ticker, context)
             macro_future = executor.submit(self.macro.run, ticker, context)
 
             analyst_result = analyst_future.result()
+            short_result = short_future.result()
             risk_result = risk_future.result()
             macro_result = macro_future.result()
 
         result.bull_case = analyst_result["output"]
+        result.short_case = short_result["output"]
         result.bear_case = risk_result["output"]
         result.macro_view = macro_result["output"]
         result.traces["sector_analyst"] = analyst_result["trace"]
+        result.traces["short_analyst"] = short_result["trace"]
         result.traces["risk_manager"] = risk_result["trace"]
         result.traces["macro_analyst"] = macro_result["trace"]
 
         # Track conviction evolution — Phase 1 snapshots
         result.conviction_timeline.append(ConvictionSnapshot(
             phase="Initial Analysis",
-            agent="Sector Analyst",
+            agent="Long Analyst",
             score=result.bull_case.conviction_score,
             score_type="conviction",
+        ))
+        result.conviction_timeline.append(ConvictionSnapshot(
+            phase="Initial Analysis",
+            agent="Short Analyst",
+            score=result.short_case.conviction_score,
+            score_type="bearish",
         ))
         result.conviction_timeline.append(ConvictionSnapshot(
             phase="Initial Analysis",
@@ -224,55 +242,56 @@ class InvestmentCommittee:
 
         status(
             f"  Bull case: conviction {result.bull_case.conviction_score}/10 | "
-            f"Bear case: bearish conviction {result.bear_case.bearish_conviction}/10 | "
+            f"Short case: conviction {result.short_case.conviction_score}/10 | "
+            f"Risk assessment: bearish {result.bear_case.bearish_conviction}/10 | "
             f"Macro favorability: {result.macro_view.macro_favorability}/10"
         )
 
         # ── Phase 2: Adversarial Debate ─────────────────────────────
-        status("Phase 2/3: Adversarial debate — agents challenging each other...")
+        status("Phase 2/3: Adversarial debate — Long vs Short analysts...")
 
         for round_num in range(1, settings.max_debate_rounds + 1):
             status(f"  Debate round {round_num}/{settings.max_debate_rounds}...")
 
             with ThreadPoolExecutor(max_workers=2) as executor:
-                analyst_reb_future = executor.submit(
-                    self.analyst.rebut, ticker, result.bear_case, result.bull_case
+                long_reb_future = executor.submit(
+                    self.analyst.rebut, ticker, result.short_case, result.bull_case
                 )
-                risk_reb_future = executor.submit(
-                    self.risk_mgr.rebut, ticker, result.bull_case, result.bear_case
+                short_reb_future = executor.submit(
+                    self.short.rebut, ticker, result.bull_case, result.short_case
                 )
 
                 try:
-                    result.analyst_rebuttal = analyst_reb_future.result()
+                    result.long_rebuttal = long_reb_future.result()
                 except Exception as e:
-                    logger.warning(f"Analyst rebuttal failed: {e}")
+                    logger.warning(f"Long analyst rebuttal failed: {e}")
                 try:
-                    result.risk_rebuttal = risk_reb_future.result()
+                    result.short_rebuttal = short_reb_future.result()
                 except Exception as e:
-                    logger.warning(f"Risk rebuttal failed: {e}")
+                    logger.warning(f"Short analyst rebuttal failed: {e}")
 
         # Track conviction evolution — Phase 2 snapshots (post-debate)
-        if result.analyst_rebuttal and result.analyst_rebuttal.revised_conviction is not None:
+        if result.long_rebuttal and result.long_rebuttal.revised_conviction is not None:
             result.conviction_timeline.append(ConvictionSnapshot(
                 phase="Post-Debate",
-                agent="Sector Analyst",
-                score=result.analyst_rebuttal.revised_conviction,
+                agent="Long Analyst",
+                score=result.long_rebuttal.revised_conviction,
                 score_type="conviction",
             ))
-        if result.risk_rebuttal and result.risk_rebuttal.revised_conviction is not None:
+        if result.short_rebuttal and result.short_rebuttal.revised_conviction is not None:
             result.conviction_timeline.append(ConvictionSnapshot(
                 phase="Post-Debate",
-                agent="Risk Manager",
-                score=result.risk_rebuttal.revised_conviction,
+                agent="Short Analyst",
+                score=result.short_rebuttal.revised_conviction,
                 score_type="bearish",
             ))
 
         status(
             f"  Debate complete | "
-            f"Analyst revised conviction: "
-            f"{result.analyst_rebuttal.revised_conviction if result.analyst_rebuttal else 'N/A'} | "
-            f"Risk Mgr revised bearish conviction: "
-            f"{result.risk_rebuttal.revised_conviction if result.risk_rebuttal else 'N/A'}"
+            f"Long Analyst revised conviction: "
+            f"{result.long_rebuttal.revised_conviction if result.long_rebuttal else 'N/A'} | "
+            f"Short Analyst revised conviction: "
+            f"{result.short_rebuttal.revised_conviction if result.short_rebuttal else 'N/A'}"
         )
 
         # ── Phase 3: PM Synthesis ───────────────────────────────────
@@ -281,9 +300,11 @@ class InvestmentCommittee:
         pm_context = {
             "bull_case": result.bull_case,
             "bear_case": result.bear_case,
+            "short_case": result.short_case,
             "macro_view": result.macro_view,
             "debate": {
-                "analyst_rebuttal": result.analyst_rebuttal.model_dump() if result.analyst_rebuttal else {},
+                "long_rebuttal": result.long_rebuttal.model_dump() if result.long_rebuttal else {},
+                "short_rebuttal": result.short_rebuttal.model_dump() if result.short_rebuttal else {},
                 "risk_rebuttal": result.risk_rebuttal.model_dump() if result.risk_rebuttal else {},
             },
             "user_context": context.get("user_context", ""),

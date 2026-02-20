@@ -19,8 +19,9 @@ STEP_ICONS = {
 }
 
 ROLE_LABELS = {
-    "sector_analyst": "Sector Analyst (Bull)",
-    "risk_manager": "Risk Manager (Bear)",
+    "sector_analyst": "Long Analyst (Bull)",
+    "short_analyst": "Short Analyst",
+    "risk_manager": "Risk Manager (Sizing)",
     "macro_analyst": "Macro Analyst (Top-Down)",
     "portfolio_manager": "Portfolio Manager (PM)",
 }

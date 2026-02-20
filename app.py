@@ -944,7 +944,7 @@ def _format_bear_preview(state: dict) -> str:
 
     lines = [
         f"### Bear Case: {bc.ticker}{degraded_tag}",
-        f"**Bearish Conviction:** {bc.bearish_conviction}/10 | **Rec:** {bc.actionable_recommendation}",
+        f"**Bearish Conviction:** {bc.bearish_conviction}/10 | **Structure:** {bc.position_structure}",
         "",
         "**Top Risks:**",
     ]
@@ -953,8 +953,8 @@ def _format_bear_preview(state: dict) -> str:
     if len(bc.risks) > 3:
         lines.append(f"- *...and {len(bc.risks) - 3} more*")
 
-    if bc.short_thesis:
-        lines.extend(["", f"**Short Thesis:** {bc.short_thesis}"])
+    if bc.worst_case_scenario:
+        lines.extend(["", f"**Worst Case:** {bc.worst_case_scenario}"])
 
     return "\n".join(lines)
 

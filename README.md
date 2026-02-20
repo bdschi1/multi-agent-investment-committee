@@ -300,7 +300,9 @@ cd multi-agent-investment-committee
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -e ".[dev]"
+pip install -e ".[dev]"       # Core + dev tools
+# Or for all optional features:
+# pip install -e ".[all,dev]"
 
 cp .env.example .env
 # Add API key(s) to .env

@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.0] - 2026-02-19
+
+### Added
+- **Five-agent architecture** — dedicated Short Analyst agent with alpha/beta short classification, borrow cost assessment, event path construction, and expected short return decomposition
+- **Adversarial debate** — Long Analyst vs Short Analyst structured rebuttals with Risk Manager sizing commentary; convictions update based on evidence quality
+- **PM conviction change map** — for each debate event, tracks which agent's conviction shifted and by how much
+- **4-way parallel fan-out** — Long, Short, Risk, and Macro agents run simultaneously via LangGraph `Send()`
+- **Batch signal accumulation script** (`scripts/accumulate_signals.py`) — runs full IC pipeline across multiple tickers
+- **Related Work section** in README citing AlphaAgents, AuditAgent, FinJailbreak, XAI literature
+
+### Changed
+- Risk Manager refocused on sizing/structuring (position structure, stop-loss, stress scenarios, correlation flags) rather than generating independent bear thesis
+- Pipeline graph updated: 4-way parallel fan-out replaces 3-way
+- `pyproject.toml` version bumped to 4.0.0
+- `[all]` extras group now includes all optional dependencies (chromadb, sentence-transformers, pyportfolioopt, scipy, scikit-learn)
+
+### Fixed
+- `_format_bear_preview` referenced non-existent `actionable_recommendation` and `short_thesis` fields on `BearCase` model; replaced with `position_structure` and `worst_case_scenario`
+
+## [3.9.0] - 2026-02-18
+
+### Added
+- **XAI pre-screen module** (`xai/` package) — five-step explainable AI procedure running before LLM agents
+  - Altman Z-Score model (zero-config) for Probability of Financial Distress (PFD) estimation
+  - Optional XGBoost distress model with automatic activation when trained artifact exists
+  - Built-in Shapley value calculators: ExactLinearShapley (analytical for Z-Score) + PermutationShapley (sampling-based for any model)
+  - Expected return computation: ER = (1 - PFD) x earnings yield proxy
+  - Dual explainability: feature-level Shapley (quantitative) + agent-level attribution (qualitative)
+- **SHAP integration** (`xai/explainer.py`) — optional `shap` library enhances with waterfall plots; graceful fallback to built-in calculators
+- **XAI training CLI** (`python -m xai.train`) — train custom XGBoost distress model on labeled data
+- **Risk profiles** and **RAG metrics** for eval scenarios
+- **FinJailbreak red-team scenarios** in `evals/scenarios/`
+- XAI-related tests
+
+### Changed
+- Pipeline graph: `gather_data → run_xai_analysis → [analysts]` (XAI inserted before fan-out)
+- All agents receive XAI context (PFD, Shapley narrative) in their prompts
+- `CommitteeState` includes `xai_result` field
+- `config/settings.py` includes XAI configuration options
+
+### Dependencies
+- Added `xgboost>=2.0.0`, `shap>=0.44.0`, `matplotlib>=3.7.0` as optional `[xai]` extras
+
 ## [3.8.0] - 2026-02-18
 
 ### Added

@@ -50,6 +50,12 @@ _PROVIDER_REGISTRY: list[tuple[str, str, str, str | None]] = [
         "IBProvider",
         "tools.data_providers.ib_provider.is_available",
     ),
+    (
+        "Alpha Vantage",
+        "tools.data_providers.alphavantage_provider",
+        "AlphaVantageProvider",
+        "tools.data_providers.alphavantage_provider.is_available",
+    ),
 ]
 
 # Singleton cache so repeated calls return the same instance

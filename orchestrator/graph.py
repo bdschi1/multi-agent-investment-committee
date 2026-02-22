@@ -303,6 +303,7 @@ def _build_config(
     model: Any = None,
     on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
+    model_cache: dict[str, Any] | None = None,
 ) -> dict:
     """Build a LangGraph config dict with configurable non-serializable objects."""
     configurable: dict[str, Any] = {}
@@ -312,6 +313,8 @@ def _build_config(
         configurable["on_status"] = on_status
     if tool_registry is not None:
         configurable["tool_registry"] = tool_registry
+    if model_cache:
+        configurable["model_cache"] = model_cache
     return {"configurable": configurable} if configurable else {}
 
 
@@ -369,8 +372,20 @@ def run_graph(
     # Build default tool registry if none provided
     tool_registry = _maybe_build_tool_registry(tool_registry)
 
+    # Build per-node model cache from settings.task_models
+    model_cache: dict[str, Any] = {}
+    try:
+        from orchestrator.model_routing import build_model_cache
+        from app import create_model as _create_model
+        model_cache = build_model_cache(model, _create_model)
+    except Exception:
+        pass  # Graceful: no overrides if import fails (e.g., in tests)
+
     # Build config for non-serializable objects
-    config = _build_config(model=model, on_status=on_status, tool_registry=tool_registry)
+    config = _build_config(
+        model=model, on_status=on_status,
+        tool_registry=tool_registry, model_cache=model_cache,
+    )
 
     initial_state: dict[str, Any] = {
         "ticker": ticker,
@@ -431,7 +446,19 @@ def run_graph_phase1(
     compiled = build_graph_phase1()
 
     tool_registry = _maybe_build_tool_registry(tool_registry)
-    config = _build_config(model=model, on_status=on_status, tool_registry=tool_registry)
+
+    model_cache: dict[str, Any] = {}
+    try:
+        from orchestrator.model_routing import build_model_cache
+        from app import create_model as _create_model
+        model_cache = build_model_cache(model, _create_model)
+    except Exception:
+        pass
+
+    config = _build_config(
+        model=model, on_status=on_status,
+        tool_registry=tool_registry, model_cache=model_cache,
+    )
 
     initial_state: dict[str, Any] = {
         "ticker": ticker,
@@ -484,7 +511,19 @@ def run_graph_phase2(
     compiled = build_graph_phase2()
 
     tool_registry = _maybe_build_tool_registry(tool_registry)
-    config = _build_config(model=model, on_status=on_status, tool_registry=tool_registry)
+
+    model_cache: dict[str, Any] = {}
+    try:
+        from orchestrator.model_routing import build_model_cache
+        from app import create_model as _create_model
+        model_cache = build_model_cache(model, _create_model)
+    except Exception:
+        pass
+
+    config = _build_config(
+        model=model, on_status=on_status,
+        tool_registry=tool_registry, model_cache=model_cache,
+    )
 
     # Inject PM guidance and update non-serializable refs
     state = dict(intermediate_state)

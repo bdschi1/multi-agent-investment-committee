@@ -103,6 +103,16 @@ class Settings(BaseSettings):
             "Unset nodes use built-in defaults from orchestrator/temperature.py."
         ),
     )
+    task_models: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Per-node model overrides. Keys are node names "
+            "(e.g. 'run_sector_analyst', 'run_portfolio_manager'). "
+            "Values are 'provider:model_name' strings "
+            "(e.g. 'google:gemini-2.0-flash', 'anthropic:claude-sonnet-4-20250514'). "
+            "Unset nodes use the shared model from the primary provider."
+        ),
+    )
 
     # --- Rate Limiting (Anthropic Tier 1 — 85% of actual limits for safety margin) ---
     rate_limit_rpm: int = Field(

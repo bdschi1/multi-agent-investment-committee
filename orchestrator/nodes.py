@@ -29,6 +29,7 @@ from agents.risk_manager import RiskManagerAgent
 from agents.sector_analyst import SectorAnalystAgent
 from agents.short_analyst import ShortAnalystAgent
 from orchestrator.committee import ConvictionSnapshot
+from orchestrator.memory import build_agent_memory
 from orchestrator.temperature import get_node_temperature, with_temperature
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,18 @@ logger = logging.getLogger(__name__)
 # Config helpers — read from config first, fall back to state
 # ---------------------------------------------------------------------------
 
-def _get_model(state: dict, config: RunnableConfig | None = None) -> Any:
-    """Get LLM model callable from config (preferred) or state (fallback)."""
+def _get_model(state: dict, config: RunnableConfig | None = None, node_name: str | None = None) -> Any:
+    """Get LLM model callable from config (preferred) or state (fallback).
+
+    If *node_name* is provided, checks for per-node model overrides in
+    ``config["configurable"]["model_cache"]`` first.
+    """
+    if config and node_name:
+        cfg = config.get("configurable", {})
+        model_cache = cfg.get("model_cache", {})
+        if node_name in model_cache:
+            return model_cache[node_name]
+
     if config:
         cfg = config.get("configurable", {})
         model = cfg.get("model")
@@ -271,12 +282,17 @@ def gather_data(state: dict, config: RunnableConfig) -> dict:
 
 def run_sector_analyst(state: dict, config: RunnableConfig) -> dict:
     """Run the Sector Analyst agent (bull case)."""
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_sector_analyst")
     model = with_temperature(model, get_node_temperature("run_sector_analyst"))
     tool_registry = _get_tool_registry(state, config)
 
+    context = state["context"]
+    memories = build_agent_memory("sector_analyst", state["ticker"], context.get("user_context", ""))
+    if memories:
+        context = {**context, "agent_memory": memories}
+
     agent = SectorAnalystAgent(model=model, tool_registry=tool_registry)
-    result = agent.run(state["ticker"], state["context"])
+    result = agent.run(state["ticker"], context)
 
     bull_case = result["output"]
     trace = result["trace"]
@@ -300,12 +316,17 @@ def run_sector_analyst(state: dict, config: RunnableConfig) -> dict:
 
 def run_risk_manager(state: dict, config: RunnableConfig) -> dict:
     """Run the Risk Manager agent (bear case)."""
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_risk_manager")
     model = with_temperature(model, get_node_temperature("run_risk_manager"))
     tool_registry = _get_tool_registry(state, config)
 
+    context = state["context"]
+    memories = build_agent_memory("risk_manager", state["ticker"], context.get("user_context", ""))
+    if memories:
+        context = {**context, "agent_memory": memories}
+
     agent = RiskManagerAgent(model=model, tool_registry=tool_registry)
-    result = agent.run(state["ticker"], state["context"])
+    result = agent.run(state["ticker"], context)
 
     bear_case = result["output"]
     trace = result["trace"]
@@ -329,12 +350,17 @@ def run_risk_manager(state: dict, config: RunnableConfig) -> dict:
 
 def run_macro_analyst(state: dict, config: RunnableConfig) -> dict:
     """Run the Macro Analyst agent (top-down context)."""
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_macro_analyst")
     model = with_temperature(model, get_node_temperature("run_macro_analyst"))
     tool_registry = _get_tool_registry(state, config)
 
+    context = state["context"]
+    memories = build_agent_memory("macro_analyst", state["ticker"], context.get("user_context", ""))
+    if memories:
+        context = {**context, "agent_memory": memories}
+
     agent = MacroAnalystAgent(model=model, tool_registry=tool_registry)
-    result = agent.run(state["ticker"], state["context"])
+    result = agent.run(state["ticker"], context)
 
     macro_view = result["output"]
     trace = result["trace"]
@@ -358,12 +384,17 @@ def run_macro_analyst(state: dict, config: RunnableConfig) -> dict:
 
 def run_short_analyst(state: dict, config: RunnableConfig) -> dict:
     """Run the Short Analyst agent (short thesis)."""
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_short_analyst")
     model = with_temperature(model, get_node_temperature("run_short_analyst"))
     tool_registry = _get_tool_registry(state, config)
 
+    context = state["context"]
+    memories = build_agent_memory("short_analyst", state["ticker"], context.get("user_context", ""))
+    if memories:
+        context = {**context, "agent_memory": memories}
+
     agent = ShortAnalystAgent(model=model, tool_registry=tool_registry)
-    result = agent.run(state["ticker"], state["context"])
+    result = agent.run(state["ticker"], context)
 
     short_case = result["output"]
     trace = result["trace"]
@@ -432,7 +463,7 @@ def run_debate_round(state: dict, config: RunnableConfig) -> dict:
     Execute one debate round: Long Analyst vs Short Analyst (primary debate),
     plus Risk Manager commentary, in parallel via ThreadPoolExecutor.
     """
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_debate_round")
     model = with_temperature(model, get_node_temperature("run_debate_round"))
 
     current_round = state.get("debate_round", 0) + 1
@@ -616,7 +647,7 @@ def run_portfolio_manager(state: dict, config: RunnableConfig) -> dict:
     - pm_guidance: user-provided guidance from HITL review step
     - prior_analyses: session memory of prior runs for this ticker
     """
-    model = _get_model(state, config)
+    model = _get_model(state, config, node_name="run_portfolio_manager")
     model = with_temperature(model, get_node_temperature("run_portfolio_manager"))
     tool_registry = _get_tool_registry(state, config)
 

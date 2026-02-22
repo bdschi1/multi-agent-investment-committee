@@ -60,6 +60,20 @@ that may highlight macro factors you would otherwise miss:
 {user_kb}
 """
 
+        memory_section = ""
+        agent_memory = context.get("agent_memory", [])
+        if agent_memory:
+            lessons = "\n".join(
+                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
+                for m in agent_memory
+            )
+            memory_section = f"""
+
+LESSONS FROM SIMILAR PAST ANALYSES:
+{lessons}
+Use these lessons to calibrate your macro assessment and avoid repeating past mistakes.
+"""
+
         prompt = f"""You are a senior global macro strategist AND portfolio strategist on an investment committee.
 Your job is to provide the TOP-DOWN MACRO CONTEXT AND PORTFOLIO-LEVEL STRATEGY GUIDANCE for analyzing {ticker}.
 
@@ -69,7 +83,7 @@ You are NOT building a bull or bear case. You are NOT a PM. You are the strategi
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}{kb_section}
+{expert_section}{kb_section}{memory_section}
 THINK about the current macro environment AND portfolio strategy. Consider:
 
 MACRO CONTEXT:

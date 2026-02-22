@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from backtest.models import BacktestResult, PortfolioSnapshot, SignalRecord
+from backtest.models import BacktestResult, PortfolioSnapshot, ReflectionRecord, SignalRecord
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +102,28 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     optimal_holding_period INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS reflections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER NOT NULL,
+    agent_role TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    reflection_date TEXT NOT NULL,
+    horizon TEXT DEFAULT 'return_20d',
+    predicted_direction INTEGER DEFAULT 0,
+    actual_return REAL,
+    was_correct INTEGER DEFAULT 0,
+    lesson TEXT DEFAULT '',
+    what_worked TEXT DEFAULT '',
+    what_failed TEXT DEFAULT '',
+    confidence_calibration TEXT DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker);
 CREATE INDEX IF NOT EXISTS idx_signals_date ON signals(signal_date);
 CREATE INDEX IF NOT EXISTS idx_portfolio_date ON portfolio_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_reflections_agent ON reflections(agent_role);
+CREATE INDEX IF NOT EXISTS idx_reflections_ticker ON reflections(ticker);
+CREATE INDEX IF NOT EXISTS idx_reflections_signal ON reflections(signal_id);
 """
 
 
@@ -122,6 +141,7 @@ class SignalDatabase:
         conn.executescript(_SCHEMA)
         conn.commit()
         self._migrate_xai_columns(conn)
+        self._migrate_reflections_table(conn)
 
     def _migrate_xai_columns(self, conn: sqlite3.Connection) -> None:
         """Add XAI columns to existing signals table if missing."""
@@ -142,6 +162,36 @@ class SignalDatabase:
             conn.commit()
         except Exception:
             logger.debug("XAI column migration skipped", exc_info=True)
+
+    def _migrate_reflections_table(self, conn: sqlite3.Connection) -> None:
+        """Ensure reflections table exists for older databases."""
+        try:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            if "reflections" not in tables:
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS reflections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        signal_id INTEGER NOT NULL,
+                        agent_role TEXT NOT NULL,
+                        ticker TEXT NOT NULL,
+                        reflection_date TEXT NOT NULL,
+                        horizon TEXT DEFAULT 'return_20d',
+                        predicted_direction INTEGER DEFAULT 0,
+                        actual_return REAL,
+                        was_correct INTEGER DEFAULT 0,
+                        lesson TEXT DEFAULT '',
+                        what_worked TEXT DEFAULT '',
+                        what_failed TEXT DEFAULT '',
+                        confidence_calibration TEXT DEFAULT ''
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_reflections_agent ON reflections(agent_role);
+                    CREATE INDEX IF NOT EXISTS idx_reflections_ticker ON reflections(ticker);
+                    CREATE INDEX IF NOT EXISTS idx_reflections_signal ON reflections(signal_id);
+                """)
+                conn.commit()
+                logger.debug("Migrated database: added reflections table")
+        except Exception:
+            logger.debug("Reflections table migration skipped", exc_info=True)
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -306,6 +356,67 @@ class SignalDatabase:
         conn.commit()
         return cursor.lastrowid
 
+    # ── Reflections ────────────────────────────────────────────────
+
+    def store_reflection(self, reflection: ReflectionRecord) -> int:
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """INSERT INTO reflections (
+                signal_id, agent_role, ticker, reflection_date,
+                horizon, predicted_direction, actual_return,
+                was_correct, lesson, what_worked, what_failed,
+                confidence_calibration
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                reflection.signal_id, reflection.agent_role, reflection.ticker,
+                reflection.reflection_date.isoformat(),
+                reflection.horizon, reflection.predicted_direction,
+                reflection.actual_return, reflection.was_correct,
+                reflection.lesson, reflection.what_worked, reflection.what_failed,
+                reflection.confidence_calibration,
+            ),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+    def get_reflections(
+        self,
+        agent_role: str | None = None,
+        ticker: str | None = None,
+        limit: int = 200,
+    ) -> list[ReflectionRecord]:
+        """Retrieve reflections, optionally filtered by agent_role and/or ticker."""
+        conn = self._get_conn()
+        clauses = []
+        params: list = []
+        if agent_role:
+            clauses.append("agent_role = ?")
+            params.append(agent_role)
+        if ticker:
+            clauses.append("ticker = ?")
+            params.append(ticker)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM reflections{where} ORDER BY reflection_date DESC LIMIT ?",
+            tuple(params),
+        ).fetchall()
+        return [self._row_to_reflection(r) for r in rows]
+
+    def get_unreflected_signals(self, horizon: str = "return_20d", limit: int = 100) -> list[SignalRecord]:
+        """Get signals that have realized returns but no reflections yet."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            f"""SELECT s.* FROM signals s
+                LEFT JOIN reflections r ON s.id = r.signal_id
+                WHERE s.{horizon} IS NOT NULL
+                AND r.id IS NULL
+                ORDER BY s.signal_date DESC
+                LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_signal(r) for r in rows]
+
     # ── Row converters ───────────────────────────────────────────
 
     @staticmethod
@@ -347,6 +458,24 @@ class SignalDatabase:
             xai_expected_return=row["xai_expected_return"],
             xai_top_risk_factor=row["xai_top_risk_factor"] or "",
             xai_model_used=row["xai_model_used"] or "",
+        )
+
+    @staticmethod
+    def _row_to_reflection(row: sqlite3.Row) -> ReflectionRecord:
+        return ReflectionRecord(
+            id=row["id"],
+            signal_id=row["signal_id"],
+            agent_role=row["agent_role"],
+            ticker=row["ticker"],
+            reflection_date=datetime.fromisoformat(row["reflection_date"]),
+            horizon=row["horizon"] or "return_20d",
+            predicted_direction=row["predicted_direction"] or 0,
+            actual_return=row["actual_return"],
+            was_correct=row["was_correct"] or 0,
+            lesson=row["lesson"] or "",
+            what_worked=row["what_worked"] or "",
+            what_failed=row["what_failed"] or "",
+            confidence_calibration=row["confidence_calibration"] or "",
         )
 
     @staticmethod

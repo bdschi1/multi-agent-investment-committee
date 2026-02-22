@@ -67,6 +67,10 @@ def main():
     # Explainability
     sub.add_parser("explain", help="Agent attribution analysis")
 
+    # Reflections
+    ref = sub.add_parser("reflect", help="Generate post-trade reflections")
+    ref.add_argument("--horizon", type=str, default="return_20d")
+
     # Full report
     sub.add_parser("report", help="Full analytics report")
 
@@ -89,6 +93,8 @@ def main():
         _cmd_portfolio(db, args.max_positions, args.min_conviction)
     elif args.command == "explain":
         _cmd_explain(db)
+    elif args.command == "reflect":
+        _cmd_reflect(db, args.horizon)
     elif args.command == "report":
         _cmd_full_report(db)
     else:
@@ -148,6 +154,13 @@ def _cmd_portfolio(db: SignalDatabase, max_positions, min_conviction):
         min_conviction=min_conviction,
     )
     print(portfolio.format_report(snapshot))
+
+
+def _cmd_reflect(db: SignalDatabase, horizon: str):
+    from backtest.reflection import ReflectionEngine
+    engine = ReflectionEngine(db)
+    count = engine.run_reflections(horizon=horizon)
+    print(f"Generated {count} reflections (horizon={horizon})")
 
 
 def _cmd_explain(db: SignalDatabase):

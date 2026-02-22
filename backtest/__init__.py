@@ -16,8 +16,9 @@ from backtest.benchmark import BenchmarkAnalyzer
 from backtest.calibration import CalibrationAnalyzer
 from backtest.database import SignalDatabase
 from backtest.explainability import ExplainabilityAnalyzer
-from backtest.models import BacktestResult, PortfolioSnapshot, SignalRecord
+from backtest.models import BacktestResult, PortfolioSnapshot, ReflectionRecord, SignalRecord
 from backtest.portfolio import MultiAssetPortfolio
+from backtest.reflection import ReflectionEngine
 from backtest.runner import BacktestRunner
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     "SignalRecord",
     "PortfolioSnapshot",
     "BacktestResult",
+    "ReflectionRecord",
+    "ReflectionEngine",
     "BacktestRunner",
     "CalibrationAnalyzer",
     "AlphaDecayAnalyzer",

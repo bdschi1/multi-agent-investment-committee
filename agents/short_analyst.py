@@ -60,6 +60,20 @@ that may highlight short opportunities you would otherwise miss:
 {user_kb}
 """
 
+        memory_section = ""
+        agent_memory = context.get("agent_memory", [])
+        if agent_memory:
+            lessons = "\n".join(
+                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
+                for m in agent_memory
+            )
+            memory_section = f"""
+
+LESSONS FROM SIMILAR PAST ANALYSES:
+{lessons}
+Use these lessons to calibrate your short thesis conviction and avoid repeating past mistakes.
+"""
+
         prompt = f"""You are a senior short-selling specialist on an investment committee.
 Your job is to evaluate whether {ticker} is a SHORT CANDIDATE.
 
@@ -81,7 +95,7 @@ SHORT THESIS CLASSIFICATION:
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}{kb_section}
+{expert_section}{kb_section}{memory_section}
 Respond with your initial short thesis thinking:
 1. What is the BULL NARRATIVE the market believes? (You must understand the long
    case before you can break it.)

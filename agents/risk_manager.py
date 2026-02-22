@@ -61,6 +61,20 @@ that may highlight risks you would otherwise miss:
 {user_kb}
 """
 
+        memory_section = ""
+        agent_memory = context.get("agent_memory", [])
+        if agent_memory:
+            lessons = "\n".join(
+                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
+                for m in agent_memory
+            )
+            memory_section = f"""
+
+LESSONS FROM SIMILAR PAST ANALYSES:
+{lessons}
+Use these lessons to calibrate your risk assessment and avoid repeating past mistakes.
+"""
+
         prompt = f"""You are a senior risk manager on an investment committee.
 Your job is to BUILD THE BEAR CASE for {ticker}. You are the devil's advocate.
 
@@ -75,7 +89,7 @@ First, THINK about what could go wrong. Consider:
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}{kb_section}
+{expert_section}{kb_section}{memory_section}
 Respond with your initial risk assessment:
 1. What are the most obvious risks? (Acknowledge them, but these are usually PRICED IN.)
 2. What are the HIDDEN risks that most analysts miss? THIS IS YOUR ALPHA.

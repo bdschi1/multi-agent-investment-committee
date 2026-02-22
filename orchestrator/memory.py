@@ -104,3 +104,96 @@ def get_session_tickers() -> list[str]:
 def get_session_summary() -> dict[str, int]:
     """Return a summary of how many analyses per ticker."""
     return {ticker: len(analyses) for ticker, analyses in _session_store.items()}
+
+
+# ---------------------------------------------------------------------------
+# Agent memory: BM25-based retrieval of past reflections
+# ---------------------------------------------------------------------------
+
+def build_agent_memory(
+    agent_role: str,
+    ticker: str,
+    context: str = "",
+    top_n: int = 3,
+    db: Any = None,
+) -> list[dict[str, Any]]:
+    """
+    Retrieve relevant past reflections for an agent using BM25 similarity.
+
+    Loads reflections for *agent_role* from SQLite, builds a BM25 index
+    from each reflection's lesson field, and queries with a combination
+    of the ticker and any user context.
+
+    Args:
+        db: Optional SignalDatabase instance.  When *None*, opens and
+            closes its own connection to the default database path.
+
+    Returns:
+        List of dicts with keys: ticker, lesson, what_worked, what_failed,
+        was_correct, conviction_calibration.  Empty list if rank_bm25 is
+        not installed or no reflections exist.
+    """
+    try:
+        from rank_bm25 import BM25Okapi
+    except ImportError:
+        logger.debug("rank_bm25 not installed — agent memory disabled")
+        return []
+
+    try:
+        own_db = False
+        if db is None:
+            from backtest.database import SignalDatabase
+            db = SignalDatabase()
+            own_db = True
+        reflections = db.get_reflections(agent_role=agent_role, limit=500)
+        if own_db:
+            db.close()
+    except Exception:
+        logger.debug("Could not load reflections for %s", agent_role, exc_info=True)
+        return []
+
+    if not reflections:
+        return []
+
+    # Small corpus: skip BM25 ranking and return most recent reflections
+    if len(reflections) <= top_n:
+        results = []
+        for r in reflections:
+            results.append({
+                "ticker": r.ticker,
+                "lesson": r.lesson,
+                "what_worked": r.what_worked,
+                "what_failed": r.what_failed,
+                "was_correct": bool(r.was_correct),
+                "confidence_calibration": r.confidence_calibration,
+            })
+        logger.debug("Agent memory for %s/%s: %d results (small corpus, no ranking)", agent_role, ticker, len(results))
+        return results
+
+    # Build BM25 index from lessons
+    corpus = []
+    for r in reflections:
+        doc = f"{r.ticker} {r.lesson} {r.what_worked} {r.what_failed}"
+        corpus.append(doc.lower().split())
+
+    bm25 = BM25Okapi(corpus)
+
+    # Query with ticker + context
+    query = f"{ticker} {context}".lower().split()
+    scores = bm25.get_scores(query)
+
+    # Rank and return top-N
+    scored = sorted(zip(scores, reflections), key=lambda x: x[0], reverse=True)
+    results = []
+    for score, r in scored[:top_n]:
+        results.append({
+            "ticker": r.ticker,
+            "lesson": r.lesson,
+            "what_worked": r.what_worked,
+            "what_failed": r.what_failed,
+            "was_correct": bool(r.was_correct),
+            "confidence_calibration": r.confidence_calibration,
+        })
+
+    logger.debug("Agent memory for %s/%s: %d results (from %d reflections)", agent_role, ticker, len(results), len(reflections))
+    return results

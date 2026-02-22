@@ -431,57 +431,8 @@ def create_model(
 def _persist_signal(result: CommitteeResult, provider_name: str, model_name: str) -> None:
     """Persist a committee result as a signal in the backtest database."""
     try:
-        from backtest import SignalDatabase, SignalRecord
-
-        if not result.committee_memo:
-            return
-
-        db = SignalDatabase()
-        memo = result.committee_memo
-
-        signal = SignalRecord(
-            ticker=result.ticker,
-            signal_date=datetime.now(UTC),
-            provider=provider_name,
-            model_name=model_name,
-            recommendation=memo.recommendation,
-            t_signal=memo.t_signal,
-            conviction=memo.conviction,
-            position_direction=memo.position_direction,
-            raw_confidence=memo.raw_confidence,
-            bull_conviction=result.bull_case.conviction_score if result.bull_case else 5.0,
-            bear_conviction=result.bear_case.bearish_conviction if result.bear_case else 5.0,
-            macro_favorability=result.macro_view.macro_favorability if result.macro_view else 5.0,
-            duration_s=result.total_duration_ms / 1000,
-            total_tokens=result.total_tokens,
-        )
-
-        # Add BL optimizer results if available
-        if result.optimization_result and hasattr(result.optimization_result, 'success'):
-            opt = result.optimization_result
-            if opt.success:
-                signal.bl_optimal_weight = opt.optimal_weight
-                signal.bl_sharpe = opt.computed_sharpe
-                signal.bl_sortino = opt.computed_sortino
-
-        # Add XAI results if available
-        xai = result.xai_result
-        if xai and hasattr(xai, 'distress'):
-            signal.xai_pfd = xai.distress.pfd
-            signal.xai_z_score = xai.distress.z_score
-            signal.xai_distress_zone = xai.distress.distress_zone
-            signal.xai_expected_return = xai.returns.expected_return
-            signal.xai_model_used = xai.distress.model_used
-            if xai.distress.top_risk_factors:
-                first_factor = xai.distress.top_risk_factors[0]
-                if isinstance(first_factor, dict):
-                    signal.xai_top_risk_factor = next(iter(first_factor), "")
-                else:
-                    signal.xai_top_risk_factor = str(first_factor)
-
-        signal_id = db.store_signal(signal)
-        db.close()
-        logger.info(f"Signal persisted: {result.ticker} → id={signal_id}")
+        from backtest.persist import persist_signal
+        persist_signal(result, provider_name, model_name)
     except Exception as e:
         logger.warning(f"Failed to persist signal: {e}")
 
@@ -543,7 +494,7 @@ def run_committee_analysis(
     if not ticker or not ticker.strip():
         return (
             "Please enter a ticker symbol.",
-            "", "", "", "", "", "", "", None, None, "", None
+            "", "", "", "", "", "", "", None, None, "", None, None, None
         )
 
     ticker = ticker.strip().upper()
@@ -558,7 +509,7 @@ def run_committee_analysis(
             "takes you somewhere unexpected.\n\n"
             '*"What a long strange trip it\'s been."*'
         )
-        return (_ripple, "", "", "", "", "", "", "", None, None, "", None)
+        return (_ripple, "", "", "", "", "", "", "", None, None, "", None, None, None)
 
     status_messages = []
 
@@ -654,7 +605,12 @@ def run_committee_analysis(
             result.conviction_timeline, ticker, result.committee_memo,
         )
         trace_md = TraceRenderer.to_gradio_accordion(result.traces)
-        status_md = _format_status(result, status_messages, provider_name)
+        status_md = _format_status(
+            result, status_messages, provider_name,
+            mode="Full Auto",
+            num_source_files=len(uploaded_files) if uploaded_files else 0,
+            expert_guidance=bool(user_context and user_context.strip()),
+        )
 
         # Generate full report text for copy/download
         full_report = _build_full_report(
@@ -668,7 +624,8 @@ def run_committee_analysis(
             f.write(full_report)
 
         return (memo_md, bull_md, short_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
-                trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
+                trajectory_fig, probability_fig, trace_md, status_md, str(export_path),
+                model, full_report + "\n\n" + xai_md)
 
     except Exception as e:
         logger.exception(f"Committee analysis failed for {ticker}")
@@ -678,7 +635,7 @@ def run_committee_analysis(
             f"**Error:** {str(e)}\n\n"
             f"Check that your API key is set in `.env` and the provider is available."
         )
-        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None, None, None
     finally:
         # Restore original debate rounds
         settings.max_debate_rounds = original_rounds
@@ -809,7 +766,7 @@ def run_phase2_synthesis(
     if intermediate_state is None:
         return (
             "No Phase 1 results available. Run Phase 1 first.",
-            "", "", "", "", "", "", None, None, "", "", None
+            "", "", "", "", "", "", None, None, "", "", None, None, None
         )
 
     status_messages = []
@@ -875,7 +832,14 @@ def run_phase2_synthesis(
             result.conviction_timeline, ticker, result.committee_memo,
         )
         trace_md = TraceRenderer.to_gradio_accordion(result.traces)
-        status_md = _format_status(result, status_messages, provider_name)
+        has_kb = bool(intermediate_state.get("context", {}).get("user_kb"))
+        status_md = _format_status(
+            result, status_messages, provider_name,
+            mode="Review Before PM",
+            num_source_files=1 if has_kb else 0,
+            expert_guidance=bool(user_context and user_context.strip()),
+            pm_guidance=bool(pm_guidance and pm_guidance.strip()),
+        )
 
         full_report = _build_full_report(
             result, memo_md, bull_md, short_md, bear_md, macro_md, debate_md, conviction_md,
@@ -887,12 +851,120 @@ def run_phase2_synthesis(
             f.write(full_report)
 
         return (memo_md, bull_md, short_md, bear_md, macro_md, xai_md, debate_md, conviction_md,
-                trajectory_fig, probability_fig, trace_md, status_md, str(export_path))
+                trajectory_fig, probability_fig, trace_md, status_md, str(export_path),
+                model, full_report + "\n\n" + xai_md)
 
     except Exception as e:
         logger.exception("Phase 2 failed")
         error_msg = f"## Error\n\n**Error:** {str(e)}"
-        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None
+        return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Q&A Chat — post-analysis follow-up conversation
+# ---------------------------------------------------------------------------
+
+_QA_SYSTEM_PREAMBLE = """You are the investment committee's analyst assistant. The user has just \
+reviewed a multi-agent investment analysis report. Answer questions ONLY from the analysis data \
+below — do not speculate beyond what the report contains. If the report does not cover a topic, \
+say so. Be concise and cite specific numbers from the report when possible.
+
+--- BEGIN ANALYSIS REPORT ---
+{report}
+--- END ANALYSIS REPORT ---"""
+
+_QA_MAX_HISTORY_TURNS = 10
+
+
+def _extract_text(content) -> str:
+    """Extract plain text from Gradio message content.
+
+    Content may be a string, or a list of {text, type} dicts (Gradio 6 format).
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(item.get("text", ""))
+            elif isinstance(item, str):
+                parts.append(item)
+        return " ".join(parts)
+    return str(content) if content else ""
+
+
+def _history_to_turns(history: list) -> list[tuple[str, str]]:
+    """Convert messages-format history to (user, assistant) turn pairs."""
+    turns: list[tuple[str, str]] = []
+    i = 0
+    while i < len(history):
+        msg = history[i]
+        if isinstance(msg, dict):
+            if msg.get("role") == "user":
+                user_text = _extract_text(msg.get("content", ""))
+                assistant_text = ""
+                if i + 1 < len(history):
+                    nxt = history[i + 1]
+                    if isinstance(nxt, dict) and nxt.get("role") == "assistant":
+                        assistant_text = _extract_text(nxt.get("content", ""))
+                        i += 1
+                turns.append((user_text, assistant_text))
+            i += 1
+        elif isinstance(msg, (list, tuple)) and len(msg) == 2:
+            turns.append((str(msg[0]), str(msg[1])))
+            i += 1
+        else:
+            i += 1
+    return turns
+
+
+def handle_chat_message(
+    user_message: str,
+    chat_history: list,
+    model_callable,
+    report_text: str,
+) -> tuple[str, list]:
+    """Send a follow-up question grounded in the analysis report.
+
+    Returns (cleared_textbox, updated_chat_history) using Gradio messages format.
+    """
+    if not user_message or not user_message.strip():
+        return "", chat_history or []
+    if model_callable is None or not report_text:
+        chat_history = list(chat_history or [])
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": "Please run an analysis first — no report is available yet."})
+        return "", chat_history
+
+    chat_history = list(chat_history or [])
+
+    # Convert history to turn pairs for prompt construction
+    turns = _history_to_turns(chat_history)
+
+    # Build single-turn prompt: system preamble + conversation history + new question
+    system = _QA_SYSTEM_PREAMBLE.format(report=report_text)
+    parts = [system, ""]
+    # Include last N turns for context
+    for human_text, assistant_text in turns[-_QA_MAX_HISTORY_TURNS:]:
+        parts.append(f"User: {human_text}")
+        parts.append(f"Assistant: {assistant_text}")
+    parts.append(f"User: {user_message}")
+    parts.append("Assistant:")
+
+    prompt = "\n".join(parts)
+
+    try:
+        response = model_callable(prompt, temperature=0.3)
+    except TypeError:
+        # Model doesn't accept temperature kwarg
+        response = model_callable(prompt)
+    except Exception as e:
+        response = f"Error generating response: {e}"
+
+    chat_history.append({"role": "user", "content": user_message})
+    chat_history.append({"role": "assistant", "content": response})
+    return "", chat_history
 
 
 # ---------------------------------------------------------------------------
@@ -2622,7 +2694,15 @@ def _format_xai_analysis(result: CommitteeResult) -> str:
     return "\n".join(lines)
 
 
-def _format_status(result: CommitteeResult, messages: list[str], provider_name: str = "") -> str:
+def _format_status(
+    result: CommitteeResult,
+    messages: list[str],
+    provider_name: str = "",
+    mode: str = "Full Auto",
+    num_source_files: int = 0,
+    expert_guidance: bool = False,
+    pm_guidance: bool = False,
+) -> str:
     """Format the status/summary view with tables."""
     stats = TraceRenderer.summary_stats(result.traces)
 
@@ -2636,6 +2716,20 @@ def _format_status(result: CommitteeResult, messages: list[str], provider_name: 
     provider = PROVIDER_DISPLAY.get(provider_name, settings.llm_provider)
     model_name = model_map.get(provider, "unknown")
 
+    # Format duration as Xm Ys
+    total_s = stats['total_duration_s']
+    mins = int(total_s // 60)
+    secs = round(total_s % 60, 1)
+    duration_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
+    # Injection flags
+    injections = []
+    if expert_guidance:
+        injections.append("Expert")
+    if pm_guidance:
+        injections.append("PM")
+    injection_str = ", ".join(injections) if injections else "None"
+
     lines = [
         f"# Session Summary: {result.ticker}",
         "",
@@ -2643,7 +2737,10 @@ def _format_status(result: CommitteeResult, messages: list[str], provider_name: 
         "|--------|-------|",
         f"| **LLM Provider** | {provider_name} |",
         f"| **Model** | `{model_name}` |",
-        f"| **Total Duration** | {stats['total_duration_s']}s |",
+        f"| **Total Duration** | {duration_str} |",
+        f"| **Mode** | {mode} |",
+        f"| **Source Files** | {num_source_files} |",
+        f"| **Injected Guidance** | {injection_str} |",
         f"| **Total Agents** | {stats['total_agents']} |",
         f"| **Total Reasoning Steps** | {stats['total_steps']} |",
         f"| **Total Tokens** | {stats['total_tokens']} |",
@@ -2714,7 +2811,7 @@ def build_ui() -> gr.Blocks:
 
 # Multi-Agent Investment Committee
 
-<span class="agent-chips">Sector Analyst &middot; Risk Manager &middot; Macro Strategist &middot; Portfolio Manager</span>
+<span class="agent-chips">Sector Analysts &middot; Risk Manager &middot; Macro Strategist &middot; Portfolio Manager</span>
 </div>""",
         )
 
@@ -2824,6 +2921,8 @@ def build_ui() -> gr.Blocks:
         # Hidden states
         report_path_state = gr.State(value=None)
         intermediate_state = gr.State(value=None)
+        chat_model_state = gr.State(value=None)
+        chat_report_state = gr.State(value=None)
 
         # ── Progress indicator (single timer) ──
         progress_status = gr.HTML(
@@ -2865,6 +2964,22 @@ def build_ui() -> gr.Blocks:
 
             with gr.TabItem("Session Info"):
                 status_output = gr.Markdown(label="Session Summary")
+
+            with gr.TabItem("Q&A Chat"):
+                qa_chatbot = gr.Chatbot(
+                    height=480,
+                    placeholder="Run an analysis first, then ask follow-up questions here.",
+                    label="Q&A Chat",
+                )
+                with gr.Row():
+                    qa_textbox = gr.Textbox(
+                        placeholder="Ask about the analysis...",
+                        show_label=False,
+                        scale=4,
+                        interactive=False,
+                    )
+                    qa_send_btn = gr.Button("Send", scale=1, interactive=False)
+                qa_clear_btn = gr.Button("Clear Chat", size="sm")
 
         # Export section
         with gr.Row(elem_classes=["export-row"]):
@@ -2910,10 +3025,11 @@ def build_ui() -> gr.Blocks:
         _lockable = [ticker_input, context_input, provider_dropdown,
                      model_dropdown, debate_rounds_input, mode_selector,
                      file_upload, pm_guidance_input,
+                     qa_textbox, qa_send_btn,
                      run_btn, phase1_btn, phase2_btn]
 
         def _lock_inputs():
-            updates = [gr.update(interactive=False) for _ in range(8)]  # input fields
+            updates = [gr.update(interactive=False) for _ in range(10)]  # input fields + chat
             updates.extend([
                 gr.update(interactive=False, value="..."),  # run_btn
                 gr.update(interactive=False, value="..."),  # phase1_btn
@@ -2922,7 +3038,7 @@ def build_ui() -> gr.Blocks:
             return updates
 
         def _unlock_inputs():
-            updates = [gr.update(interactive=True) for _ in range(8)]  # input fields
+            updates = [gr.update(interactive=True) for _ in range(10)]  # input fields + chat
             updates.extend([
                 gr.update(interactive=True, value="Run"),   # run_btn
                 gr.update(interactive=True, value="Run"),   # phase1_btn
@@ -2946,8 +3062,12 @@ def build_ui() -> gr.Blocks:
             outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
-                     report_path_state],
+                     report_path_state, chat_model_state, chat_report_state],
             show_progress="hidden",
+        ).then(
+            fn=lambda: (gr.update(value="", interactive=True), [], gr.update(interactive=True)),
+            inputs=[],
+            outputs=[qa_textbox, qa_chatbot, qa_send_btn],
         ).then(
             fn=lambda: "",
             inputs=[],
@@ -3023,8 +3143,13 @@ def build_ui() -> gr.Blocks:
             outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
-                     report_path_state, review_accordion],
+                     report_path_state, chat_model_state, chat_report_state,
+                     review_accordion],
             show_progress="hidden",
+        ).then(
+            fn=lambda: (gr.update(value="", interactive=True), [], gr.update(interactive=True)),
+            inputs=[],
+            outputs=[qa_textbox, qa_chatbot, qa_send_btn],
         ).then(
             fn=lambda: "",
             inputs=[],
@@ -3033,6 +3158,26 @@ def build_ui() -> gr.Blocks:
             fn=_unlock_inputs,
             inputs=[],
             outputs=_lockable,
+        )
+
+        # ── Q&A Chat events ──
+        _chat_inputs = [qa_textbox, qa_chatbot, chat_model_state, chat_report_state]
+        _chat_outputs = [qa_textbox, qa_chatbot]
+
+        qa_send_btn.click(
+            fn=handle_chat_message,
+            inputs=_chat_inputs,
+            outputs=_chat_outputs,
+        )
+        qa_textbox.submit(
+            fn=handle_chat_message,
+            inputs=_chat_inputs,
+            outputs=_chat_outputs,
+        )
+        qa_clear_btn.click(
+            fn=lambda: ([], ""),
+            inputs=[],
+            outputs=[qa_chatbot, qa_textbox],
         )
 
         # ── Copy button ──

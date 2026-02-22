@@ -170,3 +170,21 @@ class AttributionResult(BaseModel):
     debate_contribution: float = 0.0
     dominant_agent: str = ""
     dominant_evidence: list[str] = Field(default_factory=list)
+
+
+class ReflectionRecord(BaseModel):
+    """Post-trade reflection for a single agent on a single signal."""
+
+    id: int | None = None
+    signal_id: int = 0
+    agent_role: str = ""
+    ticker: str = ""
+    reflection_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    horizon: str = "return_20d"
+    predicted_direction: int = 0
+    actual_return: float | None = None
+    was_correct: int = 0  # 0 or 1
+    lesson: str = ""
+    what_worked: str = ""
+    what_failed: str = ""
+    confidence_calibration: str = ""

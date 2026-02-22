@@ -60,6 +60,20 @@ should materially influence your thinking:
 {user_kb}
 """
 
+        memory_section = ""
+        agent_memory = context.get("agent_memory", [])
+        if agent_memory:
+            lessons = "\n".join(
+                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
+                for m in agent_memory
+            )
+            memory_section = f"""
+
+LESSONS FROM SIMILAR PAST ANALYSES:
+{lessons}
+Use these lessons to calibrate your conviction and avoid repeating past mistakes.
+"""
+
         prompt = f"""You are a senior sector analyst on an investment committee.
 Your job is to BUILD THE BULL CASE for {ticker}.
 
@@ -67,7 +81,7 @@ First, THINK about what you know and what hypotheses you want to test.
 
 Available market data: {json.dumps(market_data, indent=2, default=str)}
 Recent news headlines: {json.dumps(news[:5], default=str) if news else 'None available'}
-{expert_section}{kb_section}
+{expert_section}{kb_section}{memory_section}
 Respond with your initial thinking:
 1. What is this company/sector and why might it be interesting?
 2. What are your initial hypotheses for a bull case?

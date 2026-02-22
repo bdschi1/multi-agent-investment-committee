@@ -234,6 +234,8 @@ After the PM produces its qualitative sizing heuristics, the `optimizer/` packag
 
 The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
 
+**Note, BL allows any model estimation error to become apparent as allocation choices may magnify poor assumptions.**
+
 </details>
 
 ---

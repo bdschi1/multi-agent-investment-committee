@@ -24,6 +24,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "bds-data-providers @ git+https://github.com/bdschi1/financial-data-providers.git",
     "smolagents>=1.0.0",
     "gradio>=6.0.0",
     "yfinance>=0.2.0",

@@ -22,6 +22,7 @@ from agents.base import (
     BaseInvestmentAgent,
     BearCase,
     Rebuttal,
+    build_context_sections,
     clean_json_artifacts,
     extract_json,
     retry_extract_json,
@@ -41,39 +42,10 @@ class RiskManagerAgent(BaseInvestmentAgent):
         market_data = context.get("market_data", {})
         news = context.get("news", [])
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-
-EXPERT GUIDANCE FROM COMMITTEE CHAIR:
-The following expert context has been provided. You MUST incorporate these
-considerations into your risk analysis — they represent domain expertise
-that may highlight risks you would otherwise miss:
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-
-{user_kb}
-"""
-
-        memory_section = ""
-        agent_memory = context.get("agent_memory", [])
-        if agent_memory:
-            lessons = "\n".join(
-                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
-                for m in agent_memory
-            )
-            memory_section = f"""
-
-LESSONS FROM SIMILAR PAST ANALYSES:
-{lessons}
-Use these lessons to calibrate your risk assessment and avoid repeating past mistakes.
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
+        memory_section = ctx["memory_section"]
 
         prompt = f"""You are a senior risk manager on an investment committee.
 Your job is to BUILD THE BEAR CASE for {ticker}. You are the devil's advocate.
@@ -208,6 +180,19 @@ XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — use for risk identificat
 {narrative}{pfd_warning}
 """
 
+        # Vol intelligence (quantitative realized + implied vol)
+        vol_section = ""
+        vol_intel = context.get("vol_intelligence")
+        if vol_intel and not isinstance(vol_intel, dict):
+            vol_intel = None
+        if vol_intel and not vol_intel.get("error"):
+            agent_summary = vol_intel.get("agent_summary", "")
+            if agent_summary:
+                vol_section = f"""
+VOLATILITY INTELLIGENCE (quantitative — use for sizing, structuring, and tail risk):
+{agent_summary}
+"""
+
         prompt = f"""You are executing your risk analysis for {ticker}. BUILD THE RISK ASSESSMENT.
 
 Your analysis plan:
@@ -216,7 +201,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{kb_section}{tool_data_section}{xai_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}{vol_section}
 Produce a STRUCTURED risk assessment with SIZING AND STRUCTURING recommendations.
 Think in CAUSAL CHAINS for 2nd/3rd order effects.
 

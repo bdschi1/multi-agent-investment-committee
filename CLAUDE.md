@@ -18,7 +18,7 @@ cp .env.example .env  # then add API key(s)
 python app.py                    # Gradio UI at http://localhost:7860
 
 # Tests
-pytest tests/ -v                 # full suite (~432 tests)
+pytest tests/ -v                 # full suite (~603 tests)
 pytest tests/test_optimizer.py -v    # optimizer tests only
 pytest tests/test_xai.py -v         # XAI module tests
 pytest tests/test_temperature.py -v  # temperature routing tests only
@@ -52,8 +52,9 @@ gather_data → run_xai_analysis → [sector_analyst, short_analyst, risk_manage
 ### Key Patterns
 
 - **LLM interface**: All models are `callable(str) -> str` with optional `temperature` kwarg. Provider-agnostic — same pipeline works with Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama.
-- **Model factories** (`app.py`): Each provider has a factory closure. All accept `temperature` kwarg for per-node routing.
-- **`RateLimitedModel`** (`app.py`): Wraps model callables with RPM/TPM rate limiting. Passes `**kwargs` through.
+- **Model factories** (`app_lib/model_factory.py`): Each provider has a factory closure. All accept `temperature` kwarg for per-node routing.
+- **`RateLimitedModel`** (`app_lib/model_factory.py`): Wraps model callables with RPM/TPM rate limiting. Passes `**kwargs` through.
+- **Result formatters** (`app_lib/formatters.py`): All `_format_*` functions for Gradio UI output.
 - **Per-node temperature** (`orchestrator/temperature.py`): `with_temperature(model, temp)` wrapper. Falls back gracefully if model doesn't support the kwarg.
 - **Graceful fallback**: Optimizer returns `OptimizerFallback` on any exception; pipeline never breaks.
 - **JSON extraction** (`agents/base.py`): `_extract_json()` handles markdown fences, partial JSON, common LLM formatting errors.
@@ -93,6 +94,32 @@ Based on: Sotic & Radovanovic (2024), "Explainable AI in Finance" (doi:10.20935/
 
 `tools/data_providers/`: `BaseDataProvider` ABC → `YahooProvider` (default), `BloombergProvider`, `IBProvider`. Factory pattern via `get_provider()`.
 
+### Volatility Surface
+
+`tools/volatility_surface.py`: Implied vol surface generation for analyst agents. Two registered tools:
+- `get_vol_surface(spot, r, model, ...)`: Full strike x maturity IV grid (Heston or CEV model)
+- `get_vol_smile(spot, maturity, model, ...)`: Single-maturity smile for quick skew assessment
+
+Models: Heston stochastic vol (COS method pricing), CEV local vol (non-central chi-squared). Returns structured dicts with `iv_surface_pct`, `atm_term_structure`, `skew_by_maturity`, and plain-English `summary.interpretation` for agent consumption. Numerical methods adapted from Oosterlee & Grzelak (2019) under BSD 3-Clause — see `THIRD_PARTY_NOTICES.md`.
+
+### Vol Intelligence Pipeline
+
+`tools/vol_intelligence.py`: Bridge between numerical vol methods and agent reasoning. Auto-runs during `gather_context()` and injects structured vol data into all agent prompts.
+
+Pipeline: `daily prices (yfinance) → realized vol → Heston calibration → implied surface → signals → agent summary`
+
+Signals produced:
+- **Realized vol** (`tools/financial_metrics.py:compute_realized_vol`): Multi-window HV (10/30/60/90d), downside vol, vol ratio, percentile rank, regime classification (low/normal/elevated/crisis)
+- **IV vs HV**: Compares 3m ATM implied vol to 30d realized. 5 signal levels: `iv_elevated`, `iv_slight_premium`, `iv_fair`, `iv_cheap`, `iv_very_cheap`
+- **Skew flags**: Squeeze risk from 25-delta skew (elevated if inverted), extreme put skew flags, vol backwardation detection
+- **Regime sizing multiplier**: Maps vol regime to BL confidence scaling [0.3, 1.3] for position sizing
+
+Agent injection (in each agent's `act()` method):
+- **Risk Manager**: Vol for sizing, structuring, and tail risk assessment
+- **Short Analyst**: Vol with squeeze risk and borrow assessment context
+- **Macro Analyst**: Computed regime and sizing multiplier for vol_budget_guidance field
+- **Portfolio Manager**: IV vs HV signal, downside vol, regime — feeds required `implied_vol_assessment` output field
+
 ### Backtest + Analytics Package
 
 `backtest/` is a self-contained analytics stack:
@@ -122,7 +149,8 @@ Based on: Sotic & Radovanovic (2024), "Explainable AI in Finance" (doi:10.20935/
 - Backtest tests use `tmp_path` fixture for temporary SQLite databases
 - Temperature tests verify kwarg passthrough and graceful fallback
 - XAI tests use mock fundamentals dicts (no API keys needed), 2 XGBoost tests skip if xgboost not installed
-- Run `pytest tests/ -v` — expect ~432 passing, 0 skipped
+- Vol intelligence tests use synthetic GBM prices (no API keys needed), 51 tests covering realized vol, IV vs HV, skew flags, regime multiplier, agent injection
+- Run `pytest tests/ -v` — expect ~603 passing, 0 skipped
 
 ## Settings
 

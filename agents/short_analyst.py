@@ -21,6 +21,7 @@ from agents.base import (
     BaseInvestmentAgent,
     Rebuttal,
     ShortCase,
+    build_context_sections,
     clean_json_artifacts,
     extract_json,
     retry_extract_json,
@@ -40,39 +41,10 @@ class ShortAnalystAgent(BaseInvestmentAgent):
         market_data = context.get("market_data", {})
         news = context.get("news", [])
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-
-EXPERT GUIDANCE FROM COMMITTEE CHAIR:
-The following expert context has been provided. You MUST incorporate these
-considerations into your short analysis — they represent domain expertise
-that may highlight short opportunities you would otherwise miss:
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-
-{user_kb}
-"""
-
-        memory_section = ""
-        agent_memory = context.get("agent_memory", [])
-        if agent_memory:
-            lessons = "\n".join(
-                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
-                for m in agent_memory
-            )
-            memory_section = f"""
-
-LESSONS FROM SIMILAR PAST ANALYSES:
-{lessons}
-Use these lessons to calibrate your short thesis conviction and avoid repeating past mistakes.
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
+        memory_section = ctx["memory_section"]
 
         prompt = f"""You are a senior short-selling specialist on an investment committee.
 Your job is to evaluate whether {ticker} is a SHORT CANDIDATE.
@@ -206,6 +178,21 @@ XAI QUANTITATIVE PRE-SCREEN (Shapley value analysis — use for short thesis sup
 {narrative}{pfd_note}
 """
 
+        # Vol intelligence (quantitative realized + implied vol)
+        vol_section = ""
+        vol_intel = context.get("vol_intelligence")
+        if vol_intel and isinstance(vol_intel, dict) and not vol_intel.get("error"):
+            agent_summary = vol_intel.get("agent_summary", "")
+            skew_flags = vol_intel.get("skew_flags", {})
+            squeeze = skew_flags.get("squeeze_risk", "unknown")
+            squeeze_msg = skew_flags.get("squeeze_assessment", "")
+            if agent_summary:
+                vol_section = f"""
+VOLATILITY INTELLIGENCE (quantitative — use for squeeze risk and borrow assessment):
+{agent_summary}
+SHORT-SPECIFIC: Squeeze risk = {squeeze}. {squeeze_msg}
+"""
+
         prompt = f"""You are executing your short analysis for {ticker}. BUILD THE SHORT CASE.
 
 Your analysis plan:
@@ -214,7 +201,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{kb_section}{tool_data_section}{xai_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}{vol_section}
 Produce a STRUCTURED short case. You MUST classify the short thesis type honestly.
 
 IMPORTANT CLASSIFICATION RULES:

@@ -44,7 +44,6 @@ _DEFAULT_TASK_TEMPERATURES: dict[str, float] = {
     "run_macro_analyst": 0.5,
     # Phase 1 reporters (no LLM calls, but included for completeness)
     "report_phase1": 0.0,
-    "mark_debate_skipped": 0.0,
     # Phase 2: debate
     "run_debate_round": 0.5,
     "report_debate_complete": 0.0,

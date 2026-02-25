@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from tools.data_providers.base import MarketDataProvider
@@ -30,15 +31,20 @@ from tools.data_providers.factory import get_provider_safe
 
 logger = logging.getLogger(__name__)
 
-# Module-level default provider (lazy-initialized)
+# Module-level default provider (lazy-initialized, guarded by _provider_lock)
 _default_provider: MarketDataProvider | None = None
+_provider_lock = threading.Lock()
 
 
 def _get_default_provider() -> MarketDataProvider:
     """Return the module-level default provider (Yahoo Finance)."""
     global _default_provider
-    if _default_provider is None:
-        _default_provider = get_provider_safe()
+    if _default_provider is not None:
+        return _default_provider
+    with _provider_lock:
+        # Double-checked locking: re-check after acquiring lock
+        if _default_provider is None:
+            _default_provider = get_provider_safe()
     return _default_provider
 
 
@@ -50,7 +56,8 @@ def set_provider(name: str = "Yahoo Finance", **kwargs: Any) -> None:
         **kwargs: Provider-specific args (e.g. host, port for Bloomberg/IB)
     """
     global _default_provider
-    _default_provider = get_provider_safe(name, **kwargs)
+    with _provider_lock:
+        _default_provider = get_provider_safe(name, **kwargs)
     logger.info("MarketDataTool provider set to: %s", _default_provider.name)
 
 

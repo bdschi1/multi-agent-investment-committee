@@ -114,18 +114,27 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Rate Limiting (Anthropic Tier 1 — 85% of actual limits for safety margin) ---
+    # --- LLM Call Timeout ---
+    model_timeout_seconds: float = Field(
+        default=120.0, ge=0.0,
+        description="Timeout in seconds for individual LLM calls (0 = no timeout)",
+    )
+
+    # --- Rate Limiting ---
+    # Per-provider defaults (85% of official Tier 1 limits for safety margin).
+    # Set any value to 0 to disable that limit.  Providers not listed run
+    # unrestricted.  Override via env vars: RATE_LIMIT_RPM, etc.
     rate_limit_rpm: int = Field(
         default=45, ge=0,
-        description="Max requests per minute for rate-limited providers (0 = no limit)",
+        description="Anthropic RPM (legacy, still used as fallback if provider_rate_limits is empty)",
     )
     rate_limit_input_tpm: int = Field(
         default=25000, ge=0,
-        description="Max input tokens per minute for rate-limited providers (0 = no limit)",
+        description="Anthropic input TPM (legacy fallback)",
     )
     rate_limit_output_tpm: int = Field(
         default=7000, ge=0,
-        description="Max output tokens per minute for rate-limited providers (0 = no limit)",
+        description="Anthropic output TPM (legacy fallback)",
     )
 
     # --- Application ---

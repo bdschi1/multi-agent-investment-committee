@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import importlib
 import logging
+import threading
 from typing import Any
 
 from tools.data_providers.base import MarketDataProvider
 
 logger = logging.getLogger(__name__)
+
+# Lock protecting _provider_cache mutations
+_cache_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Provider registry
@@ -58,7 +62,7 @@ _PROVIDER_REGISTRY: list[tuple[str, str, str, str | None]] = [
     ),
 ]
 
-# Singleton cache so repeated calls return the same instance
+# Singleton cache so repeated calls return the same instance (guarded by _cache_lock)
 _provider_cache: dict[str, MarketDataProvider] = {}
 
 
@@ -105,18 +109,19 @@ def get_provider(
         ImportError: If the required package is not installed.
         ConnectionError: If the provider can't connect (Bloomberg/IB).
     """
-    # Return cached instance if no custom kwargs
-    if not kwargs and name in _provider_cache:
-        return _provider_cache[name]
+    with _cache_lock:
+        # Return cached instance if no custom kwargs
+        if not kwargs and name in _provider_cache:
+            return _provider_cache[name]
 
-    for display_name, module_path, cls_name, _avail in _PROVIDER_REGISTRY:
-        if display_name == name:
-            mod = importlib.import_module(module_path)
-            cls = getattr(mod, cls_name)
-            instance = cls(**kwargs)
-            if not kwargs:
-                _provider_cache[name] = instance
-            return instance
+        for display_name, module_path, cls_name, _avail in _PROVIDER_REGISTRY:
+            if display_name == name:
+                mod = importlib.import_module(module_path)
+                cls = getattr(mod, cls_name)
+                instance = cls(**kwargs)
+                if not kwargs:
+                    _provider_cache[name] = instance
+                return instance
 
     available = available_providers()
     msg = (
@@ -149,4 +154,5 @@ def get_provider_safe(
 
 def clear_cache() -> None:
     """Clear the singleton provider cache (useful for testing)."""
-    _provider_cache.clear()
+    with _cache_lock:
+        _provider_cache.clear()

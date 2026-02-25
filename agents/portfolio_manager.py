@@ -20,6 +20,7 @@ from agents.base import (
     BaseInvestmentAgent,
     CommitteeMemo,
     Rebuttal,
+    build_context_sections,
     clean_json_artifacts,
     retry_extract_json,
 )
@@ -47,25 +48,9 @@ class PortfolioManagerAgent(BaseInvestmentAgent):
         short_data = short_case.model_dump() if hasattr(short_case, "model_dump") else short_case
         macro_data = macro_view.model_dump() if hasattr(macro_view, "model_dump") else macro_view
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-
-EXPERT GUIDANCE FROM COMMITTEE CHAIR:
-The following expert context was provided by the user. Factor this domain
-expertise into your synthesis — it may highlight considerations that
-neither analyst fully addressed:
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-
-{user_kb}
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
 
         # Phase C: PM guidance from HITL review step
         pm_guidance = context.get('pm_guidance', '').strip()
@@ -238,20 +223,9 @@ how they weigh evidence. Good traders are precise about triggers and levels — 
         short_data = short_case.model_dump() if hasattr(short_case, "model_dump") else short_case
         macro_data = macro_view.model_dump() if hasattr(macro_view, "model_dump") else macro_view
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-EXPERT GUIDANCE (factor into your final decision):
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-{user_kb}
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
 
         # Inject dynamic tool results if available
         tool_data_section = ""
@@ -301,6 +275,26 @@ PRIOR ANALYSES OF {ticker} (from this session):
 Consider: how has the investment case evolved? What changed since the last analysis?
 """
 
+        # Vol intelligence (quantitative realized + implied vol)
+        vol_section = ""
+        vol_intel = context.get("vol_intelligence")
+        if vol_intel and isinstance(vol_intel, dict) and not vol_intel.get("error"):
+            agent_summary = vol_intel.get("agent_summary", "")
+            iv_hv = vol_intel.get("iv_vs_hv", {})
+            regime_data = vol_intel.get("vol_regime_sizing", {})
+            rv = vol_intel.get("realized_vol", {})
+            if agent_summary:
+                vol_section = f"""
+VOLATILITY INTELLIGENCE (quantitative — USE THIS for implied_vol_assessment and sizing):
+{agent_summary}
+COMPUTED DATA FOR YOUR REQUIRED FIELDS:
+- IV vs HV signal: {iv_hv.get('signal', 'N/A')} (IV: {iv_hv.get('iv_3m_pct', 'N/A')}%, HV: {iv_hv.get('hv_30d_pct', 'N/A')}%, premium: {iv_hv.get('premium_pp', 'N/A')}pp)
+- Vol regime: {regime_data.get('regime', 'N/A')} (sizing multiplier: {regime_data.get('multiplier', 'N/A')}x)
+- Downside vol (30d): {rv.get('downside_vol_30d', 'N/A')}%
+- Vol ratio (10d/60d): {rv.get('vol_ratio_10d_60d', 'N/A')}
+Use these computed values for your implied_vol_assessment, sortino_estimate, and vol_target_rationale fields.
+"""
+
         prompt = f"""You are the Portfolio Manager making the FINAL DECISION on {ticker}.
 
 Your decision framework:
@@ -311,7 +305,7 @@ SHORT CASE (Short Analyst): {json.dumps(short_data, indent=2, default=str)}
 RISK ASSESSMENT (Risk Manager): {json.dumps(bear_data, indent=2, default=str)}
 MACRO ENVIRONMENT: {json.dumps(macro_data, indent=2, default=str)}
 DEBATE: {json.dumps(debate, indent=2, default=str)}
-{expert_section}{kb_section}{tool_data_section}{xai_section}{guidance_section}{memory_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}{vol_section}{guidance_section}{memory_section}
 IMPORTANT: Factor in the macro environment. Consider:
 - Does the economic cycle favor or hinder this stock?
 - Does the rate trajectory support or pressure the thesis?

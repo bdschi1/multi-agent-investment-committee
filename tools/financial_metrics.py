@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -220,3 +222,132 @@ class FinancialMetricsTool:
             ),
             "details": details,
         }
+
+    @staticmethod
+    def compute_realized_vol(prices: np.ndarray | list[float]) -> dict[str, Any]:
+        """Compute realized volatility metrics from a daily close price series.
+
+        Returns multi-window annualized vol, downside vol, vol ratio,
+        percentile rank, and vol regime classification.
+
+        Args:
+            prices: Daily close prices (most recent last), at least 30 data points.
+
+        Returns:
+            Dict with vol_10d, vol_30d, vol_60d, vol_90d (annualized %),
+            downside_vol_30d, vol_ratio_10d_60d, vol_percentile_rank,
+            vol_regime, and interpretation.
+        """
+        prices = np.asarray(prices, dtype=float)
+        if len(prices) < 30:
+            return {"error": "Need at least 30 daily prices for vol computation"}
+
+        # Log returns
+        log_returns = np.diff(np.log(prices))
+        ann_factor = np.sqrt(252)
+
+        result: dict[str, Any] = {}
+
+        # Multi-window realized vol (annualized)
+        for window, label in [(10, "vol_10d"), (30, "vol_30d"), (60, "vol_60d"), (90, "vol_90d")]:
+            if len(log_returns) >= window:
+                result[label] = round(float(np.std(log_returns[-window:], ddof=1) * ann_factor * 100), 2)
+            else:
+                result[label] = None
+
+        # Downside vol (annualized) — std of negative returns only
+        neg_returns_30 = log_returns[-30:][log_returns[-30:] < 0]
+        if len(neg_returns_30) >= 3:
+            result["downside_vol_30d"] = round(float(np.std(neg_returns_30, ddof=1) * ann_factor * 100), 2)
+        else:
+            result["downside_vol_30d"] = None
+
+        # Vol ratio: 10d / 60d — mean-reversion signal
+        if result.get("vol_10d") and result.get("vol_60d") and result["vol_60d"] > 0:
+            result["vol_ratio_10d_60d"] = round(result["vol_10d"] / result["vol_60d"], 2)
+        else:
+            result["vol_ratio_10d_60d"] = None
+
+        # Vol percentile rank: where 30d vol sits vs rolling 30d windows over trailing 1Y
+        if len(log_returns) >= 60:
+            rolling_vols = []
+            for i in range(30, len(log_returns) + 1):
+                window_returns = log_returns[i - 30:i]
+                rolling_vols.append(float(np.std(window_returns, ddof=1) * ann_factor * 100))
+            current_vol = rolling_vols[-1]
+            rank = sum(1 for v in rolling_vols if v <= current_vol) / len(rolling_vols)
+            result["vol_percentile_rank"] = round(rank * 100, 1)
+        else:
+            result["vol_percentile_rank"] = None
+
+        # Vol regime classification (based on 30d annualized vol)
+        vol_30 = result.get("vol_30d")
+        if vol_30 is not None:
+            if vol_30 < 12:
+                result["vol_regime"] = "low"
+            elif vol_30 < 18:
+                result["vol_regime"] = "normal"
+            elif vol_30 < 25:
+                result["vol_regime"] = "elevated"
+            else:
+                result["vol_regime"] = "crisis"
+        else:
+            result["vol_regime"] = "unknown"
+
+        # Interpretation
+        result["interpretation"] = _interpret_realized_vol(result)
+
+        return result
+
+
+def _interpret_realized_vol(vol_data: dict[str, Any]) -> str:
+    """Generate plain-English interpretation of realized vol for agents."""
+    parts = []
+
+    regime = vol_data.get("vol_regime", "unknown")
+    vol_30 = vol_data.get("vol_30d")
+    if vol_30 is not None:
+        parts.append(f"30-day realized vol is {vol_30:.1f}% ({regime} regime).")
+
+    ratio = vol_data.get("vol_ratio_10d_60d")
+    if ratio is not None:
+        if ratio > 1.3:
+            parts.append(
+                f"Vol ratio (10d/60d) is {ratio:.2f} — short-term vol spiking "
+                f"vs longer-term average. Recent stress or event-driven move."
+            )
+        elif ratio < 0.7:
+            parts.append(
+                f"Vol ratio (10d/60d) is {ratio:.2f} — vol compression. "
+                f"Mean reversion risk: compressed vol tends to expand."
+            )
+        else:
+            parts.append(f"Vol ratio (10d/60d) is {ratio:.2f} — stable vol environment.")
+
+    pctile = vol_data.get("vol_percentile_rank")
+    if pctile is not None:
+        if pctile > 80:
+            parts.append(f"Vol at {pctile:.0f}th percentile — historically elevated.")
+        elif pctile < 20:
+            parts.append(f"Vol at {pctile:.0f}th percentile — historically suppressed.")
+        else:
+            parts.append(f"Vol at {pctile:.0f}th percentile vs trailing year.")
+
+    downside = vol_data.get("downside_vol_30d")
+    vol_30_val = vol_data.get("vol_30d")
+    if downside is not None and vol_30_val is not None and vol_30_val > 0:
+        asym = downside / vol_30_val
+        if asym > 1.3:
+            parts.append(
+                f"Downside vol ({downside:.1f}%) significantly exceeds total vol "
+                f"({vol_30_val:.1f}%) — left-tail risk is elevated. "
+                f"Sortino will be worse than Sharpe suggests."
+            )
+        elif asym < 0.8:
+            parts.append(
+                f"Downside vol ({downside:.1f}%) is below total vol "
+                f"({vol_30_val:.1f}%) — losses have been contained. "
+                f"Sortino will be better than Sharpe suggests."
+            )
+
+    return " ".join(parts) if parts else "Insufficient data for vol interpretation."

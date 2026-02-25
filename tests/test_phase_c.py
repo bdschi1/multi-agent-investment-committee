@@ -289,7 +289,6 @@ class TestConfigPattern:
             nodes.run_risk_manager,
             nodes.run_macro_analyst,
             nodes.report_phase1,
-            nodes.mark_debate_skipped,
             nodes.run_debate_round,
             nodes.report_debate_complete,
             nodes.run_portfolio_manager,

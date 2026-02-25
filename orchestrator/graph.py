@@ -55,18 +55,6 @@ def _fan_out_analysts(state: CommitteeState) -> list[Send]:
     ]
 
 
-def _should_debate(state: CommitteeState) -> str:
-    """
-    After report_phase1: always enter the debate loop.
-
-    Previously this would skip debate when bull/bear scores converged
-    (spread < 2.0).  We now always debate so the user can observe the
-    convergence first-hand in the Debate tab.  The convergence spread is
-    still reported in report_debate_complete for informational purposes.
-    """
-    return "enter_debate"
-
-
 def _debate_or_exit(state: CommitteeState) -> str:
     """After a debate round: continue debating or proceed to PM."""
     current = state.get("debate_round", 0)
@@ -97,7 +85,6 @@ def build_graph() -> Any:
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
     graph.add_node("report_phase1", nodes.report_phase1)
-    graph.add_node("mark_debate_skipped", nodes.mark_debate_skipped)
     graph.add_node("run_debate_round", nodes.run_debate_round)
     graph.add_node("report_debate_complete", nodes.report_debate_complete)
     graph.add_node("run_portfolio_manager", nodes.run_portfolio_manager)
@@ -123,18 +110,8 @@ def build_graph() -> Any:
     graph.add_edge("run_risk_manager", "report_phase1")
     graph.add_edge("run_macro_analyst", "report_phase1")
 
-    # ── Convergence check: debate or skip ──
-    graph.add_conditional_edges(
-        "report_phase1",
-        _should_debate,
-        {
-            "convergence_met": "mark_debate_skipped",
-            "enter_debate": "run_debate_round",
-        },
-    )
-
-    # ── Skipped debate path ──
-    graph.add_edge("mark_debate_skipped", "report_debate_complete")
+    # ── Always debate (users observe convergence in the Debate tab) ──
+    graph.add_edge("report_phase1", "run_debate_round")
 
     # ── Debate loop ──
     graph.add_conditional_edges(
@@ -179,7 +156,6 @@ def build_graph_phase1() -> Any:
     graph.add_node("run_risk_manager", nodes.run_risk_manager)
     graph.add_node("run_macro_analyst", nodes.run_macro_analyst)
     graph.add_node("report_phase1", nodes.report_phase1)
-    graph.add_node("mark_debate_skipped", nodes.mark_debate_skipped)
     graph.add_node("run_debate_round", nodes.run_debate_round)
     graph.add_node("report_debate_complete", nodes.report_debate_complete)
 
@@ -202,17 +178,8 @@ def build_graph_phase1() -> Any:
     graph.add_edge("run_risk_manager", "report_phase1")
     graph.add_edge("run_macro_analyst", "report_phase1")
 
-    # ── Convergence check ──
-    graph.add_conditional_edges(
-        "report_phase1",
-        _should_debate,
-        {
-            "convergence_met": "mark_debate_skipped",
-            "enter_debate": "run_debate_round",
-        },
-    )
-
-    graph.add_edge("mark_debate_skipped", "report_debate_complete")
+    # ── Always debate ──
+    graph.add_edge("report_phase1", "run_debate_round")
 
     graph.add_conditional_edges(
         "run_debate_round",

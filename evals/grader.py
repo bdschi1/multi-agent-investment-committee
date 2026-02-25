@@ -2,7 +2,8 @@
 Multi-dimensional grading engine.
 
 Evaluates a CommitteeResult against scenario ground truth
-across direction, conviction, risk, fact, and reasoning dimensions.
+across direction, conviction, risk, fact recall/precision,
+reasoning, adversarial robustness, and calibration dimensions.
 """
 
 from __future__ import annotations
@@ -103,6 +104,18 @@ def _extract_text_fields(result: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Rubric weight lookup
+# ---------------------------------------------------------------------------
+
+def _get_rubric_weight(rubric: dict[str, Any], dimension_id: str, default: float) -> float:
+    """Look up dimension weight from rubric YAML, falling back to default."""
+    for dim in rubric.get("dimensions", []):
+        if dim.get("id") == dimension_id:
+            return float(dim.get("weight", default))
+    return default
+
+
+# ---------------------------------------------------------------------------
 # Likert mapping
 # ---------------------------------------------------------------------------
 
@@ -166,14 +179,14 @@ def _assign_likert_level(
 # Dimension grading functions
 # ---------------------------------------------------------------------------
 
-def _grade_direction(result: Any, truth: GroundTruth) -> DimensionScore:
+def _grade_direction(result: Any, truth: GroundTruth, weight: float = 25.0) -> DimensionScore:
     """Grade directional accuracy."""
     memo = getattr(result, "committee_memo", None)
     if memo is None:
         return DimensionScore(
             dimension_id="direction_accuracy",
             dimension_name="Direction Accuracy",
-            weight=25.0,
+            weight=weight,
             raw_score=0.0,
             weighted_score=0.0,
             explanation="No committee memo produced",
@@ -216,16 +229,16 @@ def _grade_direction(result: Any, truth: GroundTruth) -> DimensionScore:
     return DimensionScore(
         dimension_id="direction_accuracy",
         dimension_name="Direction Accuracy",
-        weight=25.0,
+        weight=weight,
         raw_score=raw,
-        weighted_score=raw * 25.0 / 100.0,
+        weighted_score=raw * weight / 100.0,
         explanation=f"{label}. Got {actual_rec} (dir={actual_dir}), "
         f"expected {expected_rec} (dir={expected_dir})",
     )
 
 
 def _grade_conviction_calibration(
-    result: Any, truth: GroundTruth,
+    result: Any, truth: GroundTruth, weight: float = 10.0,
 ) -> DimensionScore:
     """Grade conviction calibration against expected range."""
     memo = getattr(result, "committee_memo", None)
@@ -233,7 +246,7 @@ def _grade_conviction_calibration(
         return DimensionScore(
             dimension_id="conviction_calibration",
             dimension_name="Conviction Calibration",
-            weight=15.0,
+            weight=weight,
             raw_score=0.0,
             weighted_score=0.0,
             explanation="No committee memo produced",
@@ -264,24 +277,24 @@ def _grade_conviction_calibration(
     return DimensionScore(
         dimension_id="conviction_calibration",
         dimension_name="Conviction Calibration",
-        weight=15.0,
+        weight=weight,
         raw_score=raw,
-        weighted_score=raw * 15.0 / 100.0,
+        weighted_score=raw * weight / 100.0,
         explanation=label,
     )
 
 
 def _grade_risk_identification(
-    result: Any, truth: GroundTruth,
+    result: Any, truth: GroundTruth, weight: float = 18.0,
 ) -> DimensionScore:
     """Grade risk coverage using fuzzy matching."""
     if not truth.must_find_risks:
         return DimensionScore(
             dimension_id="risk_identification",
             dimension_name="Risk Identification",
-            weight=20.0,
+            weight=weight,
             raw_score=100.0,
-            weighted_score=20.0,
+            weighted_score=weight,
             explanation="No must_find_risks specified",
         )
 
@@ -303,25 +316,25 @@ def _grade_risk_identification(
     return DimensionScore(
         dimension_id="risk_identification",
         dimension_name="Risk Identification",
-        weight=20.0,
+        weight=weight,
         raw_score=raw,
-        weighted_score=raw * 20.0 / 100.0,
+        weighted_score=raw * weight / 100.0,
         explanation=f"Found {found}/{len(truth.must_find_risks)} must_find_risks "
         f"({coverage:.0%} coverage)",
     )
 
 
-def _grade_fact_coverage(
-    result: Any, truth: GroundTruth,
+def _grade_fact_recall(
+    result: Any, truth: GroundTruth, weight: float = 8.0,
 ) -> DimensionScore:
-    """Grade fact coverage using fuzzy matching."""
+    """Grade fact recall — did the system surface key facts?"""
     if not truth.must_find_facts:
         return DimensionScore(
-            dimension_id="fact_coverage",
-            dimension_name="Fact Coverage",
-            weight=15.0,
+            dimension_id="fact_recall",
+            dimension_name="Fact Recall",
+            weight=weight,
             raw_score=100.0,
-            weighted_score=15.0,
+            weighted_score=weight,
             explanation="No must_find_facts specified",
         )
 
@@ -341,17 +354,62 @@ def _grade_fact_coverage(
         raw = 10.0
 
     return DimensionScore(
-        dimension_id="fact_coverage",
-        dimension_name="Fact Coverage",
-        weight=15.0,
+        dimension_id="fact_recall",
+        dimension_name="Fact Recall",
+        weight=weight,
         raw_score=raw,
-        weighted_score=raw * 15.0 / 100.0,
+        weighted_score=raw * weight / 100.0,
         explanation=f"Found {found}/{len(truth.must_find_facts)} must_find_facts "
         f"({coverage:.0%} coverage)",
     )
 
 
-def _grade_reasoning_quality(result: Any) -> DimensionScore:
+def _grade_fact_precision(
+    result: Any, truth: GroundTruth, weight: float = 8.0,
+) -> DimensionScore:
+    """Grade fact precision — penalize hallucinated or false facts."""
+    # Combine must_not_claim and must_not_claim_facts for precision checking
+    false_claims = list(truth.must_not_claim)
+    if hasattr(truth, "must_not_claim_facts"):
+        false_claims.extend(truth.must_not_claim_facts)
+
+    if not false_claims:
+        return DimensionScore(
+            dimension_id="fact_precision",
+            dimension_name="Fact Precision",
+            weight=weight,
+            raw_score=100.0,
+            weighted_score=weight,
+            explanation="No must_not_claim or must_not_claim_facts specified",
+        )
+
+    all_text = _extract_text_fields(result).lower()
+    violations = [claim for claim in false_claims if claim.lower() in all_text]
+
+    total_checks = len(false_claims)
+    violation_rate = len(violations) / total_checks
+
+    if violation_rate == 0:
+        raw = 100.0
+    elif violation_rate <= 0.25:
+        raw = 60.0
+    elif violation_rate <= 0.50:
+        raw = 30.0
+    else:
+        raw = 0.0
+
+    return DimensionScore(
+        dimension_id="fact_precision",
+        dimension_name="Fact Precision",
+        weight=weight,
+        raw_score=raw,
+        weighted_score=raw * weight / 100.0,
+        explanation=f"{len(violations)}/{total_checks} false claims detected"
+        + (f": {violations}" if violations else ""),
+    )
+
+
+def _grade_reasoning_quality(result: Any, weight: float = 13.0) -> DimensionScore:
     """Grade reasoning chain quality with heuristics."""
     score_parts: list[tuple[float, str]] = []
 
@@ -420,10 +478,64 @@ def _grade_reasoning_quality(result: Any) -> DimensionScore:
     return DimensionScore(
         dimension_id="reasoning_quality",
         dimension_name="Reasoning Quality",
-        weight=15.0,
+        weight=weight,
         raw_score=raw,
-        weighted_score=raw * 15.0 / 100.0,
+        weighted_score=raw * weight / 100.0,
         explanation=explanation,
+    )
+
+
+def _grade_calibration_error(
+    result: Any, truth: GroundTruth, weight: float = 3.0,
+) -> DimensionScore | None:
+    """Grade calibration error — only when actual_return_pct is available."""
+    if truth.actual_return_pct is None:
+        return None  # Skip — no ground truth outcome data
+
+    memo = getattr(result, "committee_memo", None)
+    if memo is None:
+        return DimensionScore(
+            dimension_id="calibration_error",
+            dimension_name="Calibration Error",
+            weight=weight,
+            raw_score=0.0,
+            weighted_score=0.0,
+            explanation="No committee memo",
+        )
+
+    conviction = getattr(memo, "conviction", 5.0)
+    direction = getattr(memo, "position_direction", 0)
+    actual = truth.actual_return_pct
+
+    # Implied confidence: conviction/10 mapped to expected magnitude
+    # High conviction (8-10) implies large move, low (1-3) implies small
+    implied_magnitude = conviction * 3.0  # e.g., conviction 7 → expects ~21% move
+    actual_magnitude = abs(actual)
+    direction_correct = (direction > 0 and actual > 0) or (direction < 0 and actual < 0)
+
+    if direction_correct and abs(implied_magnitude - actual_magnitude) < 10:
+        raw = 100.0
+        label = "Well-calibrated: magnitude matched"
+    elif direction_correct and abs(implied_magnitude - actual_magnitude) < 20:
+        raw = 70.0
+        label = "Direction correct, magnitude within 20% of implied"
+    elif direction_correct:
+        raw = 40.0
+        label = "Direction correct but poorly sized"
+    elif not direction_correct and conviction <= 4.0:
+        raw = 30.0
+        label = "Wrong direction but low conviction showed uncertainty"
+    else:
+        raw = 0.0
+        label = "High conviction on wrong direction"
+
+    return DimensionScore(
+        dimension_id="calibration_error",
+        dimension_name="Calibration Error",
+        weight=weight,
+        raw_score=raw,
+        weighted_score=raw * weight / 100.0,
+        explanation=f"{label}. Conviction {conviction:.1f}, actual return {actual:+.1f}%",
     )
 
 
@@ -513,29 +625,56 @@ def grade_result(
     truth = scenario.ground_truth
     is_adversarial = scenario.type == "adversarial"
 
-    # Grade each dimension
+    # Look up weights from rubric (with defaults matching new weight distribution)
+    w_direction = _get_rubric_weight(rubric, "direction_accuracy", 25.0)
+    w_conviction = _get_rubric_weight(rubric, "conviction_calibration", 10.0)
+    w_risk = _get_rubric_weight(rubric, "risk_identification", 18.0)
+    w_fact_recall = _get_rubric_weight(rubric, "fact_recall", 8.0)
+    w_fact_precision = _get_rubric_weight(rubric, "fact_precision", 8.0)
+    w_reasoning = _get_rubric_weight(rubric, "reasoning_quality", 13.0)
+
+    # Grade each core dimension
     scores: list[DimensionScore] = [
-        _grade_direction(result, truth),
-        _grade_conviction_calibration(result, truth),
-        _grade_risk_identification(result, truth),
-        _grade_fact_coverage(result, truth),
-        _grade_reasoning_quality(result),
+        _grade_direction(result, truth, weight=w_direction),
+        _grade_conviction_calibration(result, truth, weight=w_conviction),
+        _grade_risk_identification(result, truth, weight=w_risk),
+        _grade_fact_recall(result, truth, weight=w_fact_recall),
+        _grade_fact_precision(result, truth, weight=w_fact_precision),
+        _grade_reasoning_quality(result, weight=w_reasoning),
     ]
 
-    # Adversarial dimension
+    # Adversarial dimension (conditional)
     if is_adversarial and scenario.adversarial:
+        w_adversarial = _get_rubric_weight(rubric, "adversarial_robustness", 15.0)
         adv_score = grade_adversarial_robustness(result, scenario.adversarial)
+        adv_score.weight = w_adversarial
+        adv_score.weighted_score = adv_score.raw_score * w_adversarial / 100.0
         scores.append(adv_score)
-    else:
-        # Redistribute adversarial weight proportionally
-        non_adv_weight = sum(s.weight for s in scores)
-        if non_adv_weight > 0:
-            scale = 100.0 / non_adv_weight
-            for s in scores:
+
+    # Calibration error dimension (conditional — only when actual_return_pct exists)
+    w_calibration = _get_rubric_weight(rubric, "calibration_error", 3.0)
+    cal_score = _grade_calibration_error(result, truth, weight=w_calibration)
+    if cal_score is not None:
+        scores.append(cal_score)
+
+    # Redistribute weight from absent conditional dimensions proportionally
+    conditional_ids = {"adversarial_robustness", "calibration_error"}
+    present_ids = {s.dimension_id for s in scores}
+    absent_conditional = conditional_ids - present_ids
+    if absent_conditional:
+        absent_weight = sum(
+            _get_rubric_weight(rubric, dim_id, 15.0 if dim_id == "adversarial_robustness" else 3.0)
+            for dim_id in absent_conditional
+        )
+        non_conditional = [s for s in scores if s.dimension_id not in conditional_ids]
+        non_conditional_weight = sum(s.weight for s in non_conditional)
+        if non_conditional_weight > 0:
+            scale = (non_conditional_weight + absent_weight) / non_conditional_weight
+            for s in non_conditional:
                 s.weight *= scale
                 s.weighted_score = s.raw_score * s.weight / 100.0
 
-    # Apply dimension overrides
+    # Apply dimension overrides (scenario-specific)
     for s in scores:
         if s.dimension_id in scenario.evaluation_criteria.dimension_overrides:
             new_weight = scenario.evaluation_criteria.dimension_overrides[s.dimension_id]
@@ -547,6 +686,16 @@ def grade_result(
         _assign_likert_level(s, rubric)
 
     total_score = sum(s.weighted_score for s in scores)
+
+    # Binary direction gate: wrong direction caps total score
+    gate_config = rubric.get("direction_gate", {})
+    if gate_config.get("enabled", False):
+        max_on_fail = gate_config.get("max_score_on_fail", 50)
+        direction_score = next(
+            (s for s in scores if s.dimension_id == "direction_accuracy"), None,
+        )
+        if direction_score and direction_score.raw_score == 0.0:
+            total_score = min(total_score, max_on_fail)
 
     # Critical failures
     critical_failures = _check_critical_failures(result, scenario, rubric)

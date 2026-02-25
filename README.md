@@ -14,7 +14,6 @@ tags:
   - investment
   - reasoning
   - langgraph
-  - reinforcement-learning
   - black-litterman
   - explainable-ai
   - shapley-values
@@ -23,10 +22,12 @@ tags:
 
 # Multi-Agent Investment Committee
 
-Five AI agents analyze a ticker in parallel, debate each other's theses, and produce a structured committee memo with a trading signal — preceded by an XAI pre-screen with Shapley value explanations and validated by a real Black-Litterman portfolio optimizer.
+An AI system that replicates an institutional investment committee. You enter a stock ticker, and five AI agents — playing the roles of a long analyst, short analyst, risk manager, macro strategist, and portfolio manager — independently analyze the stock, debate each other, and produce a structured recommendation with a position-sizing signal.
+
+Under the hood, a quantitative pre-screen estimates financial distress risk and expected returns before the agents run. After the agents reach a conclusion, a portfolio optimizer converts their qualitative views into concrete portfolio weights. Every signal is stored for historical backtesting.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-476%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-603%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
@@ -54,7 +55,7 @@ flowchart LR
     G --> H["Committee Memo"]
 ```
 
-Each agent follows a **THINK → PLAN → ACT → REFLECT** loop. Every step is captured in a reasoning trace visible in the UI. ~25 LLM API calls per analysis, 90-120 seconds wall clock depending on provider.
+Each agent follows a **THINK → PLAN → ACT → REFLECT** loop — similar to how a human analyst would frame the question, plan the analysis, write the conclusion, then reconsider. Every step is captured in a reasoning trace visible in the UI. A typical run makes ~25 LLM calls and takes 90-120 seconds depending on provider.
 
 ---
 
@@ -69,7 +70,7 @@ pip install -e ".[dev]"
 
 cp .env.example .env   # add API key(s)
 python app.py           # http://localhost:7860
-pytest tests/ -v        # 476 tests
+pytest tests/ -v        # 603 tests
 ```
 
 | Provider | Default Model | Setup |
@@ -87,7 +88,7 @@ Switch providers at runtime via the UI dropdown or `LLM_PROVIDER` in `.env`.
 
 <div align="center">
 
-[Agents](#agents) · [How It Works](#how-it-works) · [Optimizer](#black-litterman-optimizer) · [Backtest](#signal-analytics--backtesting) · [API](#rest-api) · [Evals](#eval-harness) · [Architecture](#architecture)
+[Agents](#agents) · [How It Works](#how-it-works) · [Vol Intelligence](#volatility-intelligence) · [Optimizer](#black-litterman-optimizer) · [Backtest](#signal-analytics--backtesting) · [Agent Memory](#agent-memory--post-trade-reflection) · [API](#rest-api) · [Evals](#eval-harness) · [Architecture](#architecture)
 
 </div>
 
@@ -139,7 +140,7 @@ flowchart TD
 
 ## How It Works
 
-The pipeline runs in six phases:
+The system follows the same workflow as a real investment committee: gather data, let each specialist analyze independently, have the bull and bear sides challenge each other, then have the PM make the final call with quantitative validation.
 
 1. **XAI Pre-Screen** — Quantitative distress estimation + Shapley explanations before any LLM calls
 2. **Parallel Analysis** — Four agents analyze simultaneously with XAI context injected
@@ -148,7 +149,7 @@ The pipeline runs in six phases:
 5. **Portfolio Optimization** — Black-Litterman computes real weights from PM conviction
 6. **Signal Persistence** — Every signal stored in SQLite for backtesting and analytics
 
-Each pipeline node runs at a task-appropriate temperature (data extraction: 0.1, analysis: 0.5, PM synthesis: 0.7, math: 0.0).
+Each pipeline node runs at a task-appropriate "temperature" — an LLM setting that controls how creative vs. deterministic the output is. Data extraction uses low temperature (stick to facts), while the PM uses higher temperature (connect themes, weigh trade-offs).
 
 ---
 
@@ -156,6 +157,8 @@ Each pipeline node runs at a task-appropriate temperature (data extraction: 0.1,
 
 <details>
 <summary>Five-step explainable AI procedure that runs before the LLM agents, giving them quantitative context</summary>
+
+Before any AI agent writes a word, the system runs a quantitative check: how likely is this company to face financial distress, and what's driving that risk? The results — along with which financial metrics matter most and why — are passed to the agents so their analysis starts from a data-grounded baseline rather than pure LLM reasoning.
 
 ```mermaid
 flowchart LR
@@ -205,10 +208,33 @@ Convictions update based on evidence. The PM's conviction change map tracks exac
 
 ---
 
+### Volatility Intelligence
+
+<details>
+<summary>Quantitative vol analysis auto-injected into all agent prompts</summary>
+
+During data gathering, the system computes a volatility profile for the stock — how much the price has been moving historically, what the options market implies about future moves, and whether current conditions look calm or stressed. These signals are injected into each agent's prompt so they can reason about vol quantitatively rather than guessing.
+
+| Signal | What it measures |
+|--------|-----------------|
+| **Realized vol** | Multi-window historical vol (10/30/60/90d), downside vol, vol ratio, percentile rank, regime classification (low/normal/elevated/crisis) |
+| **Implied vol surface** | Strike-by-maturity IV grid from Heston stochastic vol model, ATM term structure, skew by maturity |
+| **IV vs HV** | Compares 3-month implied vol to 30-day realized. Signals: `iv_elevated`, `iv_slight_premium`, `iv_fair`, `iv_cheap`, `iv_very_cheap` |
+| **Skew flags** | Squeeze risk from inverted 25-delta skew, extreme put skew, vol backwardation |
+| **Regime multiplier** | Maps vol regime to a position-sizing scalar [0.3 - 1.3] — the optimizer scales conviction confidence accordingly |
+
+Each agent receives the relevant subset: the Risk Manager uses vol for sizing and tail risk, the Short Analyst gets squeeze and borrow context, the Macro Analyst gets regime classification, and the PM gets IV vs HV and downside vol for its required output fields.
+
+</details>
+
+---
+
 ### Black-Litterman Optimizer
 
 <details>
-<summary>Real pypfopt Black-Litterman model that turns PM conviction into portfolio weights</summary>
+<summary>pypfopt Black-Litterman model that turns PM conviction into portfolio weights</summary>
+
+The optimizer translates the PM's qualitative recommendation ("I'm 80% confident this stock outperforms by 5%") into actual portfolio weights across the target stock, its sector peers, and broad market indices. It starts from market-consensus expectations and adjusts them based on the PM's views — stocks the PM is more confident about get larger tilts.
 
 ```mermaid
 flowchart TD
@@ -223,7 +249,7 @@ flowchart TD
     EF --> AN["Analytics<br/><sub>Sharpe, Sortino, betas, MCTR</sub>"]
 ```
 
-After the PM produces its qualitative sizing heuristics, the `optimizer/` package runs a real [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) Black-Litterman model:
+After the PM produces its qualitative sizing heuristics, the `optimizer/` package runs a [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) Black-Litterman model:
 
 1. **Universe construction** — target stock + 5 sector peers + sector ETF + SPY (7-8 assets)
 2. **Covariance estimation** — Ledoit-Wolf shrinkage on 2 years of daily returns
@@ -245,12 +271,14 @@ The report displays a **side-by-side comparison** of LLM heuristic estimates vs.
 <details>
 <summary>Full analytics stack for evaluating signal quality over time</summary>
 
+Every recommendation the system produces is stored in a database. Over time, you can measure whether higher-conviction calls actually produce better returns, how quickly the signal decays, and which agents contributed most to the final call — the same kind of post-trade attribution a fund would run on its analysts.
+
 ```mermaid
 flowchart LR
-    SIG["IC Signal<br/><sub>T, conviction, direction</sub>"] --> DB[("SQLite<br/><sub>signals table</sub>")]
+    SIG["Committee Signal<br/><sub>T, conviction, direction</sub>"] --> DB[("SQLite<br/><sub>signals table</sub>")]
     DB --> BT["Backtest<br/><sub>fill returns, P&L</sub>"]
     DB --> CAL["Calibration<br/><sub>conviction buckets</sub>"]
-    DB --> AD["Alpha Decay<br/><sub>IC by horizon</sub>"]
+    DB --> AD["Alpha Decay<br/><sub>info coefficient by horizon</sub>"]
     DB --> BM["Benchmark<br/><sub>vs SPY, momentum</sub>"]
     DB --> PORT["Portfolio<br/><sub>multi-asset weights</sub>"]
     DB --> EXP["Attribution<br/><sub>agent decomposition</sub>"]
@@ -261,8 +289,8 @@ flowchart LR
 | **Signal Persistence** | SQLite database stores every signal with conviction, direction, T signal, and BL optimizer output |
 | **Historical Backtest** | Fills realized 1d/5d/10d/20d/60d returns, computes directional P&L, Sharpe, win rate, max drawdown |
 | **Calibration** | Bins signals by conviction level, measures hit rate and avg return per bucket — answers "is conviction 8/10 better than 6/10?" |
-| **Alpha Decay** | Information coefficient at each horizon — identifies optimal holding period and signal half-life |
-| **Benchmark Comparison** | IC signals vs SPY buy-and-hold, always-long, and momentum (T-signal ranked) |
+| **Alpha Decay** | Information coefficient (IC) at each horizon — identifies optimal holding period and signal half-life |
+| **Benchmark Comparison** | Committee signals vs SPY buy-and-hold, always-long, and momentum (T-signal ranked) |
 | **Multi-Asset Portfolio** | Aggregates latest signal per ticker, constructs weighted portfolio with exposure metrics |
 | **Explainability** | Decomposes each T signal into bull/bear/macro/debate agent contributions |
 
@@ -277,6 +305,21 @@ python -m backtest portfolio                  # Build portfolio snapshot
 python -m backtest explain                    # Agent attribution analysis
 python -m backtest report                     # Full analytics report
 ```
+
+</details>
+
+---
+
+### Agent Memory + Post-Trade Reflection
+
+<details>
+<summary>Agents learn from past calls via a reflection-and-retrieval feedback loop</summary>
+
+After realized returns come in, the system generates a reflection for each agent on each signal — was the call correct, what worked, what failed, and was conviction appropriately calibrated? These reflections are stored in SQLite alongside the signals.
+
+On future runs, each agent's prompt is augmented with relevant past reflections retrieved via BM25 similarity search. If the Risk Manager is analyzing a biotech stock, it retrieves its own prior reflections on similar tickers — lessons like "high conviction was misplaced on XYZ" or "correctly flagged tail risk on ABC." This gives agents a form of institutional memory across sessions.
+
+Reflections can be generated rule-based (no LLM cost) or LLM-powered (richer lessons). The retrieval uses `rank_bm25` and degrades gracefully if the library is not installed.
 
 </details>
 
@@ -327,11 +370,31 @@ Works across all providers (Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ol
 
 ---
 
+### Per-Node Model Routing
+
+<details>
+<summary>Run different LLM models at different pipeline stages to balance cost and quality</summary>
+
+Independent of temperature, each pipeline node can use a different LLM model — or even a different provider. A common setup: use a fast, cheap model (e.g., `gemini-2.0-flash`) for data gathering and analyst agents, but route the PM synthesis to a more capable model (e.g., `claude-sonnet-4-20250514`) where reasoning quality matters most.
+
+Configure via `.env` or `settings.task_models`:
+
+```
+TASK_MODELS={"run_sector_analyst": "google:gemini-2.0-flash", "run_portfolio_manager": "anthropic:claude-sonnet-4-20250514"}
+```
+
+Format is `provider:model_name`. If no colon, the current provider is used with just the model name swapped. Models with the same spec share a single rate limiter instance.
+
+</details>
+
+---
+
 ## Architecture
 
 ```mermaid
 graph TD
-    APP["<b>app.py</b><br/><sub>Gradio UI</sub>"] --> ORCH["<b>orchestrator/</b><br/><sub>LangGraph StateGraph</sub>"]
+    APP["<b>app.py</b><br/><sub>Gradio UI</sub>"] --> APPLIB["<b>app_lib/</b><br/><sub>Model Factory + Formatters</sub>"]
+    APP --> ORCH["<b>orchestrator/</b><br/><sub>LangGraph StateGraph</sub>"]
     APP --> TOOLS["<b>tools/</b><br/><sub>Data + Aggregation</sub>"]
 
     ORCH --> AGENTS["<b>agents/</b><br/><sub>5 AI Agents</sub>"]
@@ -354,7 +417,10 @@ graph TD
 
 ```
 multi-agent-investment-committee/
-├── app.py                       # Gradio UI + report formatting
+├── app.py                       # Gradio UI + pipeline orchestration
+├── app_lib/
+│   ├── model_factory.py         # LLM provider factories, rate limiting, timeout
+│   └── formatters.py            # Report formatting + preview builders
 ├── agents/
 │   ├── base.py                  # BaseAgent ABC + schemas + JSON extraction
 │   ├── sector_analyst.py        # Long Analyst — bull case + sentiment
@@ -368,7 +434,8 @@ multi-agent-investment-committee/
 │   ├── state.py                 # CommitteeState TypedDict with reducers
 │   ├── committee.py             # CommitteeResult + ConvictionSnapshot
 │   ├── temperature.py           # Per-node temperature routing
-│   ├── memory.py                # Session memory store
+│   ├── model_routing.py         # Per-node model selection
+│   ├── memory.py                # Session memory store + BM25 retrieval
 │   └── reasoning_trace.py       # Trace rendering
 ├── optimizer/
 │   ├── bl_optimizer.py          # Main BL pipeline (universe → cov → views → BL → frontier)
@@ -388,14 +455,19 @@ multi-agent-investment-committee/
 │   ├── peer_comparison.py       # Peer valuation
 │   ├── data_aggregator.py       # Unified data pipeline
 │   ├── doc_chunker.py           # Document ingestion + chunking
+│   ├── volatility_surface.py    # Implied vol surface (Heston/CEV models)
+│   ├── vol_intelligence.py      # Vol regime signals + agent injection
 │   └── data_providers/          # Provider abstraction (yahoo/bloomberg/ib)
 ├── evals/
 │   ├── schemas.py               # EvalScenario, GroundTruth, GradingResult, LikertLevel
 │   ├── grader.py                # 6-dimension scoring engine
 │   ├── adversarial.py           # Context injection + robustness grading
+│   ├── llm_judge.py             # LLM-as-judge evaluation
 │   ├── loader.py                # YAML scenario discovery
 │   ├── runner.py                # Scenario execution
 │   ├── reporter.py              # JSON/markdown report generation
+│   ├── risk_profiles.py         # Risk tolerance profiles for eval scenarios
+│   ├── rag_metrics.py           # RAG retrieval quality metrics
 │   ├── scenarios/               # Ground-truth + adversarial YAML scenarios
 │   └── rubrics/                 # Scoring rubric definitions
 ├── backtest/
@@ -403,10 +475,12 @@ multi-agent-investment-committee/
 │   ├── models.py                # SignalRecord, BacktestResult, CalibrationBucket, etc.
 │   ├── runner.py                # Historical backtest engine (fill returns, compute P&L)
 │   ├── calibration.py           # Conviction-return calibration analysis
-│   ├── alpha_decay.py           # IC at multiple horizons, optimal holding period
-│   ├── benchmark.py             # IC vs SPY, always-long, momentum
+│   ├── alpha_decay.py           # Information coefficient at multiple horizons
+│   ├── benchmark.py             # Signals vs SPY, always-long, momentum
 │   ├── portfolio.py             # Multi-asset portfolio construction
 │   ├── explainability.py        # Agent attribution decomposition
+│   ├── persist.py               # Shared signal persistence utility
+│   ├── reflection.py            # Post-trade reflection + agent memory
 │   └── __main__.py              # CLI: python -m backtest
 ├── xai/
 │   ├── models.py                # XAIResult, DistressAssessment, ReturnDecomposition schemas
@@ -422,9 +496,13 @@ multi-agent-investment-committee/
 ├── api/
 │   ├── main.py                  # FastAPI app with /analyze, /signals, /backtest, /portfolio
 │   └── models.py                # Request/response Pydantic models
+├── scripts/
+│   ├── accumulate_signals.py    # Batch signal accumulation across tickers
+│   ├── inter_rater_reliability.py # Inter-rater reliability analysis
+│   └── run_permutations.py      # Agent permutation testing
 ├── config/
 │   └── settings.py              # Pydantic settings with .env + per-node temperature overrides + XAI config
-├── tests/                       # 476 tests
+├── tests/                       # 603 tests
 ├── .env.example                 # Environment variable template
 ├── CHANGELOG.md                 # Version history
 └── pyproject.toml
@@ -474,9 +552,11 @@ pip install -e ".[ibkr]"        # Interactive Brokers
 <details>
 <summary><b>Structured output hardening</b></summary>
 
+LLMs sometimes return malformed output — broken JSON, extra text outside the structure, or incomplete responses. The system handles this with multiple layers of repair so the pipeline doesn't break mid-run.
+
 All agents use a progressive JSON extraction pipeline with 7 repair strategies (markdown block removal, brace boundary, trailing comma fix, quote repair, unbalanced brace repair).
 
-- **Retry-with-feedback** — When extraction fails, the model receives the error and its truncated response, and is prompted to produce clean JSON. One retry typically recovers 80%+ of parse failures.
+- **Retry-with-feedback** — When extraction fails, the model receives the error and its truncated response, and is prompted to produce clean JSON.
 - **Ollama JSON mode** — Prompts requesting JSON output automatically trigger Ollama's `format: "json"` constraint, preventing free-form text responses from smaller models.
 
 </details>
@@ -495,7 +575,7 @@ uvicorn api.main:app --reload --port 8000
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/analyze` | POST | Run full IC pipeline, returns signal + stores in DB |
+| `/analyze` | POST | Run full committee pipeline, returns signal + stores in DB |
 | `/signals` | GET | List stored signals (filter by ticker) |
 | `/signals/{id}` | GET | Get specific signal by ID |
 | `/backtest` | POST | Run backtest on stored signals |
@@ -512,6 +592,8 @@ uvicorn api.main:app --reload --port 8000
 <details>
 <summary>Ground-truth evaluation framework for grading committee output against known historical scenarios</summary>
 
+The eval harness answers the question: "If we had run this system before a known event (e.g., SVB collapse, NVDA's AI run), would it have gotten the direction right and identified the key risks?" Scenarios with known outcomes are replayed and graded on six dimensions.
+
 **Grading dimensions** (6 dimensions, 100 total points):
 - Direction accuracy (25) — did the committee get the direction right?
 - Conviction calibration (15) — was conviction appropriately scaled?
@@ -520,7 +602,7 @@ uvicorn api.main:app --reload --port 8000
 - Reasoning quality (15) — did agents update convictions, produce substantive rebuttals?
 - Adversarial robustness (10) — did agents detect injected/tainted data?
 
-Each dimension maps to a 5-point **Likert level** (Fail/Poor/Adequate/Good/Excellent) with dimension-specific anchor definitions for interpretability.
+Each dimension maps to a 5-point scale (Fail/Poor/Adequate/Good/Excellent) with dimension-specific anchor definitions for interpretability.
 
 **Scenarios included** (ground truth filled, ready to run):
 - NVDA mid-2024 (AI datacenter thesis, +25% actual)
@@ -543,26 +625,12 @@ python -m evals report                        # generate report from results/
 
 ## Execution Modes
 
-<details>
-<summary>Full Auto and Human-in-the-Loop modes</summary>
-
 | Mode | Description |
 |------|-------------|
-| Full Auto | Runs entire pipeline end-to-end |
-| Review Before PM | Two-phase HITL — review analyst outputs + debate, optionally add PM guidance, then PM synthesizes |
+| **Full Auto** | Runs entire pipeline end-to-end |
+| **Review Before PM** | Two-phase HITL — review analyst outputs + debate, optionally add PM guidance, then PM synthesizes |
 
-</details>
-
----
-
-## Document Upload
-
-<details>
-<summary>Upload research documents as supplementary context for all agents</summary>
-
-Upload up to 5 research documents (PDF, DOCX, TXT). Files are token-aware chunked (800 tokens/chunk) and injected into all agents as supplementary context. Requires `pip install -e ".[docs]"` for PDF/DOCX support.
-
-</details>
+**Document upload:** Upload up to 5 research documents (PDF, DOCX, TXT) as supplementary context for all agents. Files are token-aware chunked and injected into agent prompts. Requires `pip install -e ".[docs]"` for PDF/DOCX support.
 
 ---
 
@@ -610,11 +678,12 @@ This system draws on academic research in multi-agent financial AI, explainabili
 - v3.3: Conviction timeline with LLM-generated rationale
 - v3.4: Small-LLM resilience, model selection, Ollama improvements
 - v3.5: T signal with citation, conviction tracker redesign
-- v3.6: Eval harness, adversarial testing framework, Likert scoring, data provider abstraction
+- v3.6: Eval harness, adversarial testing framework, 5-level grading scale, data provider abstraction
 - v3.7: Black-Litterman portfolio optimizer, per-node temperature routing
 - v3.8: Signal persistence (SQLite), historical backtesting, calibration analysis, alpha decay, benchmark comparison, multi-asset portfolio, explainability/attribution, FastAPI REST endpoint, structured output hardening (retry + Ollama JSON mode)
 - v3.9: XAI pre-screen module — Altman Z-Score/XGBoost distress estimation, built-in Shapley value decomposition (exact linear + permutation-based), expected return computation, dual explainability (feature-level + agent-level). Based on Sotic & Radovanovic (2024)
 - v4.0: Five-agent architecture — dedicated Short Analyst (alpha/beta short classification, borrow assessment, event path), Risk Manager refocused on sizing/structuring (position structure, stop-loss, stress scenarios, correlation flags), Long vs Short adversarial debate with Risk Manager commentary, PM conviction change map, 4-way parallel fan-out
+- v4.1: Per-node model routing, agent memory with BM25 retrieval, volatility surface generation (Heston/CEV), vol intelligence pipeline, realized vol signals, IV vs HV assessment, app.py modularization (`app_lib/` package), shared context injection helper, Alpha Vantage provider
 
 </details>
 

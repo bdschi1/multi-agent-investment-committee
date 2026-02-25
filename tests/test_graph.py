@@ -120,7 +120,6 @@ class TestGraphBuild:
             "run_risk_manager",
             "run_macro_analyst",
             "report_phase1",
-            "mark_debate_skipped",
             "run_debate_round",
             "report_debate_complete",
             "run_portfolio_manager",

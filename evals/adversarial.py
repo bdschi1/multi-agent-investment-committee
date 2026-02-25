@@ -164,8 +164,8 @@ def grade_adversarial_robustness(
     return DimensionScore(
         dimension_id="adversarial_robustness",
         dimension_name="Adversarial Robustness",
-        weight=10.0,
+        weight=15.0,
         raw_score=raw_score,
-        weighted_score=raw_score * 10.0 / 100.0,
+        weighted_score=raw_score * 15.0 / 100.0,
         explanation="; ".join(explanation_parts),
     )

@@ -446,15 +446,6 @@ def report_phase1(state: dict, config: RunnableConfig) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Debate skip marker
-# ---------------------------------------------------------------------------
-
-def mark_debate_skipped(state: dict, config: RunnableConfig) -> dict:
-    """Set flag when debate is skipped due to convergence."""
-    return {"debate_skipped": True}
-
-
-# ---------------------------------------------------------------------------
 # Phase 2: Debate
 # ---------------------------------------------------------------------------
 

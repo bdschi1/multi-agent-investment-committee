@@ -12,7 +12,9 @@ __pycache__/
 *.egg
 dist/
 build/
+.eggs/
 *.whl
+*.tar.gz
 
 # ── PyTorch / model artifacts ───────────────────────────────────
 offload_temp/
@@ -50,6 +52,7 @@ env/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.tox/
 
 # ── Jupyter ─────────────────────────────────────────────────────
 .ipynb_checkpoints/

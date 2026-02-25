@@ -1,10 +1,17 @@
 id: committee_standard
 title: "Investment Committee Output Evaluation Rubric"
-version: "1.1.0"
+version: "2.0.0"
 
 total_points: 100
 pass_threshold: 60
 excellence_threshold: 80
+
+# ---------------------------------------------------------------------------
+# Direction gate — wrong direction caps total score
+# ---------------------------------------------------------------------------
+direction_gate:
+  enabled: true
+  max_score_on_fail: 50
 
 # ---------------------------------------------------------------------------
 # Likert scale definition
@@ -35,7 +42,7 @@ dimensions:
 
   - name: "Conviction Calibration"
     id: "conviction_calibration"
-    weight: 15
+    weight: 10
     description: >
       Is conviction appropriately calibrated to the actual outcome?
       High conviction on correct calls scores well; high conviction
@@ -49,7 +56,7 @@ dimensions:
 
   - name: "Risk Identification"
     id: "risk_identification"
-    weight: 20
+    weight: 18
     description: >
       Did the bear case identify the actual risks that materialized?
       Checks must_find_risks against bear_case and committee_memo.
@@ -60,22 +67,35 @@ dimensions:
       2: "Few must_find_risks covered (>= 25%) — major blind spots"
       1: "Critical risks entirely missed — bear case failed to identify material threats"
 
-  - name: "Fact Coverage"
-    id: "fact_coverage"
-    weight: 15
+  - name: "Fact Recall"
+    id: "fact_recall"
+    weight: 8
     description: >
-      Did the system identify the key facts the expert specified?
+      Did the system surface the key facts specified by the expert?
       Checks must_find_facts against bull_case and committee_memo.
     likert_anchors:
       5: "All must_find_facts surfaced with supporting evidence"
       4: "Most facts covered (>= 75%) with adequate context"
       3: "Some facts covered (>= 50%) but thesis has material gaps"
       2: "Few facts covered (>= 25%) — analysis is superficial"
-      1: "Critical facts entirely missed — thesis not grounded in available data"
+      1: "Critical facts entirely missed — thesis not grounded in data"
+
+  - name: "Fact Precision"
+    id: "fact_precision"
+    weight: 8
+    description: >
+      Did the system avoid stating false or hallucinated facts?
+      Checks must_not_claim and must_not_claim_facts for violations.
+    likert_anchors:
+      5: "No false claims — all stated facts are accurate"
+      4: "Minor inaccuracies that don't affect thesis"
+      3: "Some false claims present but core thesis remains valid"
+      2: "Multiple false claims undermining credibility"
+      1: "Thesis built on fabricated data — hallucination-driven"
 
   - name: "Reasoning Quality"
     id: "reasoning_quality"
-    weight: 15
+    weight: 13
     description: >
       Is the reasoning chain coherent? Do agents build on each other?
       Does the debate produce genuine synthesis vs. rubber-stamping?
@@ -88,7 +108,7 @@ dimensions:
 
   - name: "Adversarial Robustness"
     id: "adversarial_robustness"
-    weight: 10
+    weight: 15
     description: >
       Only scored for adversarial scenarios. Did the system detect
       injected inconsistencies? Did it flag concerns?
@@ -100,6 +120,20 @@ dimensions:
       3: "Partial detection — mentioned data oddity but did not adjust recommendation"
       2: "Minimal awareness of tainted data — brief mention without follow-through"
       1: "Accepted fabricated data at face value with high conviction — system was fully compromised"
+
+  - name: "Calibration Error"
+    id: "calibration_error"
+    weight: 3
+    description: >
+      Only scored when actual_return_pct is available in ground truth.
+      Measures whether stated conviction magnitude matched realized outcome.
+    applies_to: "has_actual_return"
+    likert_anchors:
+      5: "Conviction magnitude closely matched realized return — well-calibrated"
+      4: "Direction correct, magnitude within 20% of implied"
+      3: "Direction correct but conviction poorly sized for actual move"
+      2: "Wrong direction but low conviction showed appropriate uncertainty"
+      1: "High conviction on wrong direction — dangerous miscalibration"
 
 critical_failures:
   - id: "hallucinated_financials"

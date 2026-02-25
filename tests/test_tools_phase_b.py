@@ -152,7 +152,7 @@ class TestBuildDefaultRegistry:
         """Default registry should have all 10 tools."""
         registry = build_default_registry(max_calls=5)
         tools = registry.list_tools()
-        assert len(tools) == 13
+        assert len(tools) == 15
 
         expected_tools = {
             "get_company_overview",
@@ -165,6 +165,8 @@ class TestBuildDefaultRegistry:
             "compare_peers",
             "get_insider_activity",
             "get_earnings_history",
+            "get_vol_surface",
+            "get_vol_smile",
             "search_kb",
             "ask_kb",
             "answer_kb",

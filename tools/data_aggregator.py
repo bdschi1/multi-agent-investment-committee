@@ -21,6 +21,22 @@ from tools.news_retrieval import NewsRetrievalTool
 logger = logging.getLogger(__name__)
 
 
+def _fetch_daily_prices(ticker: str, period: str = "1y") -> list[float] | None:
+    """Fetch raw daily close prices via yfinance for vol computation.
+
+    Returns a list of daily close prices (oldest first), or None on failure.
+    """
+    try:
+        import yfinance as yf
+        hist = yf.Ticker(ticker).history(period=period)
+        if hist.empty or "Close" not in hist.columns:
+            return None
+        return hist["Close"].dropna().tolist()
+    except Exception as e:
+        logger.warning(f"Failed to fetch daily prices for {ticker}: {e}")
+        return None
+
+
 class DataAggregator:
     """Aggregates all data sources into a unified context for agents."""
 
@@ -36,7 +52,8 @@ class DataAggregator:
             user_context: Optional user-provided context or thesis to evaluate
 
         Returns:
-            Dict with market_data, financial_metrics, news, valuation, quality, etc.
+            Dict with market_data, financial_metrics, news, valuation, quality,
+            vol_intelligence, etc.
         """
         logger.info(f"Gathering data for {ticker}...")
 
@@ -50,6 +67,9 @@ class DataAggregator:
         # Compute derived metrics
         valuation = FinancialMetricsTool.compute_valuation_assessment(fundamentals)
         quality = FinancialMetricsTool.compute_quality_score(fundamentals)
+
+        # Compute vol intelligence (realized vol + implied vol + signals)
+        vol_intel = _compute_vol_context(ticker, price_data)
 
         context = {
             # Raw data
@@ -65,16 +85,49 @@ class DataAggregator:
             "valuation_assessment": valuation,
             "quality_score": quality,
 
+            # Vol intelligence — quantitative vol analysis for agents
+            "vol_intelligence": vol_intel,
+
             # User input
             "user_context": user_context,
             "ticker": ticker,
         }
 
+        vol_regime = "N/A"
+        if vol_intel and not vol_intel.get("error"):
+            regime_data = vol_intel.get("vol_regime_sizing", {})
+            vol_regime = regime_data.get("regime", "N/A")
+
         logger.info(
             f"Context gathered for {ticker}: "
             f"{len(news_formatted)} news articles, "
             f"quality={quality.get('quality_label', 'N/A')}, "
-            f"valuation={valuation.get('overall_valuation', 'N/A')}"
+            f"valuation={valuation.get('overall_valuation', 'N/A')}, "
+            f"vol_regime={vol_regime}"
         )
 
         return context
+
+
+def _compute_vol_context(ticker: str, price_data: dict[str, Any]) -> dict[str, Any] | None:
+    """Compute vol intelligence from daily price history.
+
+    Graceful fallback: returns None if price data is unavailable.
+    """
+    try:
+        daily_prices = _fetch_daily_prices(ticker, period="1y")
+        if daily_prices is None or len(daily_prices) < 30:
+            logger.info(f"Insufficient price history for vol intelligence on {ticker}")
+            return {"error": "Insufficient price history for vol computation"}
+
+        spot = price_data.get("current_price") or daily_prices[-1]
+
+        from tools.vol_intelligence import compute_vol_intelligence
+        return compute_vol_intelligence(
+            ticker=ticker,
+            prices=daily_prices,
+            spot=float(spot),
+        )
+    except Exception as e:
+        logger.warning(f"Vol intelligence computation failed for {ticker}: {e}")
+        return {"error": f"Vol intelligence failed: {e}"}

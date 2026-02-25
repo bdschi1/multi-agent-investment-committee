@@ -21,7 +21,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -53,6 +53,80 @@ def _coerce_str_list(v: Any) -> list[str]:
         else:
             result.append(str(item))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Constrained-value normalizer for LLM outputs
+# ---------------------------------------------------------------------------
+
+def _normalize_to_literal(value: str, allowed: tuple[str, ...], default: str) -> str:
+    """Normalize an LLM-produced string to one of the allowed literal values.
+
+    Handles common LLM variations: extra whitespace, inconsistent casing,
+    underscores vs spaces vs hyphens. Falls back to *default* if no match.
+    """
+    if not isinstance(value, str):
+        return default
+
+    def _canon(s: str) -> str:
+        return s.strip().lower().replace("-", " ").replace("_", " ").strip()
+
+    cleaned = _canon(value)
+    # Exact match after normalization
+    for allowed_val in allowed:
+        if cleaned == _canon(allowed_val):
+            return allowed_val
+    # Prefix match (handles e.g. "strong buy — high conviction" → "STRONG BUY")
+    for allowed_val in allowed:
+        norm = _canon(allowed_val)
+        if cleaned.startswith(norm) or norm.startswith(cleaned):
+            return allowed_val
+    return default
+
+
+# ---------------------------------------------------------------------------
+# Shared context-section builders (eliminates duplication across agents)
+# ---------------------------------------------------------------------------
+
+def build_context_sections(context: dict[str, Any]) -> dict[str, str]:
+    """Build the standard context injection sections shared by all agents.
+
+    Returns a dict with keys: expert_section, kb_section, memory_section.
+    Each value is a formatted string (empty string if the data isn't present).
+    """
+    user_context = context.get("user_context", "").strip()
+    expert_section = ""
+    if user_context:
+        expert_section = (
+            "\n\nEXPERT GUIDANCE FROM COMMITTEE CHAIR:\n"
+            "The following expert context has been provided. You MUST incorporate these\n"
+            "considerations into your analysis — they represent domain expertise that\n"
+            f"should materially influence your thinking:\n{user_context}\n"
+        )
+
+    user_kb = context.get("user_kb", "").strip()
+    kb_section = ""
+    if user_kb:
+        kb_section = f"\n\n{user_kb}\n"
+
+    memory_section = ""
+    agent_memory = context.get("agent_memory", [])
+    if agent_memory:
+        lessons = "\n".join(
+            f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
+            for m in agent_memory
+        )
+        memory_section = (
+            "\n\nLESSONS FROM SIMILAR PAST ANALYSES:\n"
+            f"{lessons}\n"
+            "Use these lessons to calibrate your conviction and avoid repeating past mistakes.\n"
+        )
+
+    return {
+        "expert_section": expert_section,
+        "kb_section": kb_section,
+        "memory_section": memory_section,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -138,10 +212,21 @@ class BullCase(BaseModel):
         default_factory=list,
         description="Extracted sentiment factors from news: [{headline, sentiment, signal_strength, catalyst_type}, ...]",
     )
-    aggregate_news_sentiment: str = Field(
+    aggregate_news_sentiment: Literal[
+        "strongly_bullish", "bullish", "neutral", "bearish", "strongly_bearish"
+    ] = Field(
         default="neutral",
         description="Overall news sentiment: strongly_bullish / bullish / neutral / bearish / strongly_bearish",
     )
+
+    @field_validator("aggregate_news_sentiment", mode="before")
+    @classmethod
+    def _normalize_sentiment(cls, v):
+        return _normalize_to_literal(
+            v,
+            ("strongly_bullish", "bullish", "neutral", "bearish", "strongly_bearish"),
+            "neutral",
+        )
     sentiment_divergence: str = Field(
         default="",
         description="Where news sentiment diverges from price action or fundamentals",
@@ -195,10 +280,17 @@ class ShortCase(BaseModel):
 
     ticker: str
     short_thesis: str = Field(default="", description="Specific mechanism for stock decline")
-    thesis_type: str = Field(
+    thesis_type: Literal["alpha_short", "hedge", "pair_leg", "no_position"] = Field(
         default="no_position",
         description="alpha_short / hedge / pair_leg / no_position",
     )
+
+    @field_validator("thesis_type", mode="before")
+    @classmethod
+    def _normalize_thesis_type(cls, v):
+        return _normalize_to_literal(
+            v, ("alpha_short", "hedge", "pair_leg", "no_position"), "no_position",
+        )
     event_path: list[str] = Field(
         default_factory=list,
         description="Ordered events that cause the short to work",
@@ -255,10 +347,17 @@ class BearCase(BaseModel):
     bearish_conviction: float = Field(ge=0.0, le=10.0, description="0 = minimal concern, 10 = maximum bearish conviction")
     key_vulnerabilities: dict[str, Any] = Field(default_factory=dict)
     # Sizing/structuring fields (Risk Manager's primary v4 focus)
-    position_structure: str = Field(
+    position_structure: Literal["outright", "hedged", "paired", "options_overlay"] = Field(
         default="outright",
         description="outright / hedged / paired / options_overlay",
     )
+
+    @field_validator("position_structure", mode="before")
+    @classmethod
+    def _normalize_position_structure(cls, v):
+        return _normalize_to_literal(
+            v, ("outright", "hedged", "paired", "options_overlay"), "outright",
+        )
     stop_loss_level: str = Field(
         default="",
         description="Specific price level for stop-loss",
@@ -440,7 +539,12 @@ class CommitteeMemo(BaseModel):
     """Final synthesized output from the Portfolio Manager."""
 
     ticker: str
-    recommendation: str = Field(description="STRONG BUY / BUY / HOLD / UNDERWEIGHT / SELL / ACTIVE SHORT")
+    recommendation: Literal[
+        "STRONG BUY", "BUY", "HOLD", "UNDERWEIGHT", "SELL", "ACTIVE SHORT"
+    ] = Field(
+        default="HOLD",
+        description="STRONG BUY / BUY / HOLD / UNDERWEIGHT / SELL / ACTIVE SHORT",
+    )
     position_size: str = Field(description="e.g. 'Full position', 'Half position', 'No position'")
     conviction: float = Field(ge=0.0, le=10.0)
     thesis_summary: str = ""
@@ -538,6 +642,15 @@ class CommitteeMemo(BaseModel):
         default=0.0,
         description="T = direction * entropy-adjusted confidence. Range [-1, 1].",
     )
+
+    @field_validator("recommendation", mode="before")
+    @classmethod
+    def _normalize_recommendation(cls, v):
+        return _normalize_to_literal(
+            v,
+            ("STRONG BUY", "BUY", "HOLD", "UNDERWEIGHT", "SELL", "ACTIVE SHORT"),
+            "HOLD",
+        )
 
     @field_validator(
         "key_factors", "bull_points_accepted", "bear_points_accepted",

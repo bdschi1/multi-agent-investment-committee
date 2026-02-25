@@ -22,6 +22,7 @@ from agents.base import (
     BaseInvestmentAgent,
     MacroView,
     Rebuttal,
+    build_context_sections,
     clean_json_artifacts,
     retry_extract_json,
 )
@@ -40,39 +41,10 @@ class MacroAnalystAgent(BaseInvestmentAgent):
         market_data = context.get("market_data", {})
         news = context.get("news", [])
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-
-EXPERT GUIDANCE FROM COMMITTEE CHAIR:
-The following expert context has been provided. You MUST incorporate these
-considerations into your macro analysis — they represent domain expertise
-that may highlight macro factors you would otherwise miss:
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-
-{user_kb}
-"""
-
-        memory_section = ""
-        agent_memory = context.get("agent_memory", [])
-        if agent_memory:
-            lessons = "\n".join(
-                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
-                for m in agent_memory
-            )
-            memory_section = f"""
-
-LESSONS FROM SIMILAR PAST ANALYSES:
-{lessons}
-Use these lessons to calibrate your macro assessment and avoid repeating past mistakes.
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
+        memory_section = ctx["memory_section"]
 
         prompt = f"""You are a senior global macro strategist AND portfolio strategist on an investment committee.
 Your job is to provide the TOP-DOWN MACRO CONTEXT AND PORTFOLIO-LEVEL STRATEGY GUIDANCE for analyzing {ticker}.
@@ -224,6 +196,21 @@ XAI QUANTITATIVE PRE-SCREEN (company financial health context for macro assessme
 {narrative}
 """
 
+        # Vol intelligence (quantitative — regime, sizing, term structure)
+        vol_section = ""
+        vol_intel = context.get("vol_intelligence")
+        if vol_intel and isinstance(vol_intel, dict) and not vol_intel.get("error"):
+            agent_summary = vol_intel.get("agent_summary", "")
+            regime_data = vol_intel.get("vol_regime_sizing", {})
+            rv = vol_intel.get("realized_vol", {})
+            if agent_summary:
+                vol_section = f"""
+VOLATILITY INTELLIGENCE (quantitative — USE THIS for vol regime classification and sizing):
+{agent_summary}
+COMPUTED VOL REGIME: {regime_data.get('regime', 'unknown')} (30d HV: {rv.get('vol_30d', 'N/A')}%, sizing multiplier: {regime_data.get('multiplier', 'N/A')}x)
+Use these computed values for your annualized_vol_regime and vol_budget_guidance fields.
+"""
+
         prompt = f"""You are executing your macro analysis AND portfolio strategy assessment for {ticker}.
 Provide the TOP-DOWN CONTEXT + PORTFOLIO GUARDRAILS.
 
@@ -233,7 +220,7 @@ Your analysis plan:
 Market data: {json.dumps(market_data, indent=2, default=str)}
 Financial metrics: {json.dumps(metrics, indent=2, default=str)}
 Recent news: {json.dumps(news[:10], default=str) if news else 'None available'}
-{expert_section}{kb_section}{tool_data_section}{xai_section}
+{expert_section}{kb_section}{tool_data_section}{xai_section}{vol_section}
 Produce a STRUCTURED macro view + portfolio strategy. This is context and guardrails — not a buy/sell recommendation.
 
 Respond in valid JSON matching this exact schema:

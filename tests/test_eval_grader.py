@@ -10,9 +10,11 @@ from evals.grader import (
     _assign_likert_level,
     _check_must_not_claim,
     _fuzzy_match,
+    _grade_calibration_error,
     _grade_conviction_calibration,
     _grade_direction,
-    _grade_fact_coverage,
+    _grade_fact_precision,
+    _grade_fact_recall,
     _grade_reasoning_quality,
     _grade_risk_identification,
     _score_to_likert_level,
@@ -262,6 +264,13 @@ class TestGradeDirection:
         score = _grade_direction(result, truth)
         assert score.raw_score == 0.0
 
+    def test_weight_parameter(self):
+        result = _make_result()
+        truth = _make_truth()
+        score = _grade_direction(result, truth, weight=30.0)
+        assert score.weight == 30.0
+        assert score.weighted_score == 100.0 * 30.0 / 100.0
+
 
 # ---------------------------------------------------------------------------
 # Conviction calibration
@@ -294,6 +303,12 @@ class TestGradeConvictionCalibration:
         score = _grade_conviction_calibration(result, truth)
         assert score.raw_score == 0.0
 
+    def test_weight_parameter(self):
+        result = _make_result(committee_memo=MockMemo(conviction=7.0))
+        truth = _make_truth(conviction_range=(6.0, 9.0))
+        score = _grade_conviction_calibration(result, truth, weight=10.0)
+        assert score.weight == 10.0
+
 
 # ---------------------------------------------------------------------------
 # Risk identification
@@ -322,21 +337,78 @@ class TestGradeRiskIdentification:
 
 
 # ---------------------------------------------------------------------------
-# Fact coverage
+# Fact recall (was fact coverage)
 # ---------------------------------------------------------------------------
 
-class TestGradeFactCoverage:
+class TestGradeFactRecall:
     def test_facts_found(self):
         result = _make_result()
         truth = _make_truth(must_find_facts=["AI datacenter demand"])
-        score = _grade_fact_coverage(result, truth)
+        score = _grade_fact_recall(result, truth)
         assert score.raw_score >= 80.0
+        assert score.dimension_id == "fact_recall"
 
     def test_no_facts_specified(self):
         result = _make_result()
         truth = _make_truth(must_find_facts=[])
-        score = _grade_fact_coverage(result, truth)
+        score = _grade_fact_recall(result, truth)
         assert score.raw_score == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Fact precision (new)
+# ---------------------------------------------------------------------------
+
+class TestGradeFactPrecision:
+    def test_no_violations(self):
+        result = _make_result()
+        truth = _make_truth(must_not_claim=["cryptocurrency is the future"])
+        score = _grade_fact_precision(result, truth)
+        assert score.raw_score == 100.0
+        assert score.dimension_id == "fact_precision"
+
+    def test_violation_found(self):
+        result = _make_result(
+            committee_memo=MockMemo(thesis_summary="AI datacenter demand is strong"),
+        )
+        truth = _make_truth(must_not_claim=["ai datacenter demand is strong"])
+        score = _grade_fact_precision(result, truth)
+        assert score.raw_score == 0.0  # 1/1 = 100% violation
+
+    def test_partial_violations(self):
+        result = _make_result(
+            committee_memo=MockMemo(thesis_summary="Revenue will triple"),
+        )
+        truth = _make_truth(
+            must_not_claim=[
+                "revenue will triple",
+                "cryptocurrency integration",
+                "quantum breakthrough",
+                "teleportation tech",
+            ],
+        )
+        score = _grade_fact_precision(result, truth)
+        assert score.raw_score == 60.0  # 1/4 = 25% violation rate
+
+    def test_no_claims_specified(self):
+        result = _make_result()
+        truth = _make_truth(must_not_claim=[])
+        score = _grade_fact_precision(result, truth)
+        assert score.raw_score == 100.0
+
+    def test_must_not_claim_facts_combined(self):
+        result = _make_result(
+            committee_memo=MockMemo(thesis_summary="Revenue will triple and market cap hits 10T"),
+        )
+        truth = GroundTruth(
+            expected_direction=1,
+            expected_recommendation_bucket="BUY",
+            must_not_claim=["revenue will triple"],
+            must_not_claim_facts=["market cap hits 10t"],
+        )
+        score = _grade_fact_precision(result, truth)
+        # Both violations found: 2/2 = 100%
+        assert score.raw_score == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +437,63 @@ class TestGradeReasoningQuality:
         # No rebuttals → drops from 25 to 5, but keeps all other components
         assert score.raw_score == 80.0
 
+    def test_weight_parameter(self):
+        result = _make_result()
+        score = _grade_reasoning_quality(result, weight=13.0)
+        assert score.weight == 13.0
+
+
+# ---------------------------------------------------------------------------
+# Calibration error (new)
+# ---------------------------------------------------------------------------
+
+class TestGradeCalibrationError:
+    def test_returns_none_without_actual_return(self):
+        result = _make_result()
+        truth = _make_truth()
+        assert truth.actual_return_pct is None
+        score = _grade_calibration_error(result, truth)
+        assert score is None
+
+    def test_well_calibrated(self):
+        result = _make_result(committee_memo=MockMemo(conviction=7.0))
+        truth = _make_truth(actual_return_pct=20.0)  # conviction 7 → implied ~21%
+        score = _grade_calibration_error(result, truth)
+        assert score is not None
+        assert score.raw_score == 100.0
+
+    def test_direction_correct_poor_sizing(self):
+        result = _make_result(committee_memo=MockMemo(conviction=3.0))
+        truth = _make_truth(actual_return_pct=50.0)  # conviction 3 → implied 9%, actual 50%
+        score = _grade_calibration_error(result, truth)
+        assert score is not None
+        assert score.raw_score == 40.0
+
+    def test_wrong_direction_low_conviction(self):
+        result = _make_result(
+            committee_memo=MockMemo(position_direction=1, conviction=3.0),
+        )
+        truth = _make_truth(actual_return_pct=-15.0)  # Wrong direction
+        score = _grade_calibration_error(result, truth)
+        assert score is not None
+        assert score.raw_score == 30.0
+
+    def test_wrong_direction_high_conviction(self):
+        result = _make_result(
+            committee_memo=MockMemo(position_direction=1, conviction=9.0),
+        )
+        truth = _make_truth(actual_return_pct=-20.0)  # Wrong direction, high conviction
+        score = _grade_calibration_error(result, truth)
+        assert score is not None
+        assert score.raw_score == 0.0
+
+    def test_no_memo(self):
+        result = _make_result(committee_memo=None)
+        truth = _make_truth(actual_return_pct=10.0)
+        score = _grade_calibration_error(result, truth)
+        assert score is not None
+        assert score.raw_score == 0.0
+
 
 # ---------------------------------------------------------------------------
 # Critical failures
@@ -382,6 +511,79 @@ class TestMustNotClaim:
         )
         violations = _check_must_not_claim(result, ["ai datacenter demand is strong"])
         assert len(violations) == 1
+
+
+# ---------------------------------------------------------------------------
+# Direction gate (new)
+# ---------------------------------------------------------------------------
+
+class TestDirectionGate:
+    def test_gate_caps_total_on_wrong_direction(self):
+        """Wrong direction with high conviction should cap total at 50."""
+        result = _make_result(
+            committee_memo=MockMemo(
+                position_direction=-1,
+                conviction=9.0,
+                recommendation="ACTIVE SHORT",
+            ),
+        )
+        scenario = _make_scenario()
+        rubric = {
+            "pass_threshold": 60,
+            "critical_failures": [],
+            "direction_gate": {"enabled": True, "max_score_on_fail": 50},
+            "dimensions": [
+                {"id": "direction_accuracy", "weight": 25},
+                {"id": "conviction_calibration", "weight": 10},
+                {"id": "risk_identification", "weight": 18},
+                {"id": "fact_recall", "weight": 8},
+                {"id": "fact_precision", "weight": 8},
+                {"id": "reasoning_quality", "weight": 13},
+            ],
+        }
+        grading = grade_result(result, scenario, rubric)
+        assert grading.total_score <= 50.0
+
+    def test_gate_does_not_cap_correct_direction(self):
+        """Correct direction should not be capped."""
+        result = _make_result()
+        scenario = _make_scenario()
+        rubric = {
+            "pass_threshold": 60,
+            "critical_failures": [],
+            "direction_gate": {"enabled": True, "max_score_on_fail": 50},
+            "dimensions": [
+                {"id": "direction_accuracy", "weight": 25},
+                {"id": "conviction_calibration", "weight": 10},
+                {"id": "risk_identification", "weight": 18},
+                {"id": "fact_recall", "weight": 8},
+                {"id": "fact_precision", "weight": 8},
+                {"id": "reasoning_quality", "weight": 13},
+            ],
+        }
+        grading = grade_result(result, scenario, rubric)
+        assert grading.total_score > 50.0
+
+    def test_gate_disabled(self):
+        """When gate is disabled, wrong direction is not capped."""
+        result = _make_result(
+            committee_memo=MockMemo(
+                position_direction=-1,
+                conviction=4.0,  # Low conviction so raw_score = 20
+                recommendation="SELL",
+            ),
+        )
+        scenario = _make_scenario()
+        rubric = {
+            "pass_threshold": 60,
+            "critical_failures": [],
+            "direction_gate": {"enabled": False},
+            "dimensions": [],
+        }
+        grading = grade_result(result, scenario, rubric)
+        # Direction raw_score is 20 (wrong dir, low conviction), not 0
+        # so gate wouldn't trigger anyway — but verify no capping logic runs
+        assert grading.total_score > 0
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +630,7 @@ class TestAdversarial:
         )
         score = grade_adversarial_robustness(result, config)
         assert score.raw_score > 50.0
+        assert score.weight == 15.0  # Updated weight
 
     def test_grade_robustness_fooled(self):
         result = _make_result(
@@ -571,7 +774,65 @@ class TestGradeResult:
         grading = grade_result(result, scenario, rubric)
         assert grading.total_score > 0
         assert grading.scenario_id == "test"
-        assert len(grading.dimension_scores) >= 5
+        # 6 core dimensions (no adversarial, no calibration_error)
+        assert len(grading.dimension_scores) >= 6
+
+    def test_has_new_dimensions(self):
+        """Verify fact_recall, fact_precision are present instead of fact_coverage."""
+        result = _make_result()
+        scenario = _make_scenario()
+        rubric = {"pass_threshold": 60, "critical_failures": []}
+        grading = grade_result(result, scenario, rubric)
+        dim_ids = {ds.dimension_id for ds in grading.dimension_scores}
+        assert "fact_recall" in dim_ids
+        assert "fact_precision" in dim_ids
+        assert "fact_coverage" not in dim_ids
+
+    def test_calibration_error_included_when_actual_return(self):
+        """Calibration error should appear when actual_return_pct is set."""
+        result = _make_result()
+        truth_data = _make_truth(actual_return_pct=15.0).model_dump()
+        scenario = _make_scenario(ground_truth=truth_data)
+        rubric = {"pass_threshold": 60, "critical_failures": []}
+        grading = grade_result(result, scenario, rubric)
+        dim_ids = {ds.dimension_id for ds in grading.dimension_scores}
+        assert "calibration_error" in dim_ids
+
+    def test_calibration_error_absent_without_actual_return(self):
+        """Calibration error should not appear when actual_return_pct is None."""
+        result = _make_result()
+        scenario = _make_scenario()
+        rubric = {"pass_threshold": 60, "critical_failures": []}
+        grading = grade_result(result, scenario, rubric)
+        dim_ids = {ds.dimension_id for ds in grading.dimension_scores}
+        assert "calibration_error" not in dim_ids
+
+    def test_rubric_driven_weights(self):
+        """Weights from rubric should override defaults."""
+        result = _make_result()
+        scenario = _make_scenario()
+        rubric = {
+            "pass_threshold": 60,
+            "critical_failures": [],
+            "dimensions": [
+                {"id": "direction_accuracy", "weight": 30},
+                {"id": "conviction_calibration", "weight": 5},
+                {"id": "risk_identification", "weight": 20},
+                {"id": "fact_recall", "weight": 10},
+                {"id": "fact_precision", "weight": 10},
+                {"id": "reasoning_quality", "weight": 10},
+            ],
+        }
+        grading = grade_result(result, scenario, rubric)
+        direction_score = next(
+            ds for ds in grading.dimension_scores
+            if ds.dimension_id == "direction_accuracy"
+        )
+        # Weight should be scaled up because adversarial/calibration absent
+        # but the base weight from rubric should be 30
+        # Due to redistribution of absent conditional weights, the final
+        # weight will be larger than 30
+        assert direction_score.weight >= 30.0
 
     def test_likert_levels_populated(self):
         result = _make_result()
@@ -584,7 +845,8 @@ class TestGradeResult:
                 {"id": "direction_accuracy", "likert_anchors": {5: "Exact match"}},
                 {"id": "conviction_calibration", "likert_anchors": {5: "In range"}},
                 {"id": "risk_identification", "likert_anchors": {5: "All risks"}},
-                {"id": "fact_coverage", "likert_anchors": {5: "All facts"}},
+                {"id": "fact_recall", "likert_anchors": {5: "All facts"}},
+                {"id": "fact_precision", "likert_anchors": {5: "No false claims"}},
                 {"id": "reasoning_quality", "likert_anchors": {5: "Full quality"}},
             ],
         }

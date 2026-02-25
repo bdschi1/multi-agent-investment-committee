@@ -73,7 +73,7 @@ class TestLoadRubric:
         assert rubric["id"] == "committee_standard"
         assert rubric["total_points"] == 100
         assert rubric["pass_threshold"] == 60
-        assert len(rubric["dimensions"]) == 6
+        assert len(rubric["dimensions"]) == 8
 
     def test_rubric_has_likert_scale(self):
         rubric = load_rubric("committee_standard", _RUBRICS_DIR)

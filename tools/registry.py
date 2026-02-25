@@ -26,6 +26,7 @@ from tools.insider_data import InsiderDataTool
 from tools.market_data import MarketDataTool
 from tools.news_retrieval import NewsRetrievalTool
 from tools.peer_comparison import PeerComparisonTool
+from tools.volatility_surface import VolatilitySurfaceTool
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +236,30 @@ def build_default_registry(max_calls: int = 5) -> ToolRegistry:
         description="Get earnings history with beat/miss data and trend assessment",
         func=EarningsDataTool.get_earnings_history,
         parameters={"ticker": "Stock ticker symbol"},
+    ))
+
+    # --- Volatility surface tools ---
+
+    registry.register(ToolSpec(
+        name="get_vol_surface",
+        description="Generate implied volatility surface (strike x maturity grid) using Heston or CEV model",
+        func=VolatilitySurfaceTool.get_vol_surface,
+        parameters={
+            "spot": "Current stock price (required)",
+            "r": "Risk-free rate (default 0.04)",
+            "model": "'heston' (default) or 'cev'",
+        },
+    ))
+
+    registry.register(ToolSpec(
+        name="get_vol_smile",
+        description="Generate single-maturity implied volatility smile for quick skew assessment",
+        func=VolatilitySurfaceTool.get_vol_smile,
+        parameters={
+            "spot": "Current stock price (required)",
+            "maturity": "Time to expiry in years (default 0.25)",
+            "model": "'heston' (default) or 'cev'",
+        },
     ))
 
     # --- Knowledge Base tools (optional — graceful fallback if KB not available) ---

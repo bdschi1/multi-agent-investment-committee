@@ -21,6 +21,7 @@ from agents.base import (
     BaseInvestmentAgent,
     BullCase,
     Rebuttal,
+    build_context_sections,
     clean_json_artifacts,
     extract_json,
     retry_extract_json,
@@ -40,39 +41,10 @@ class SectorAnalystAgent(BaseInvestmentAgent):
         market_data = context.get("market_data", {})
         news = context.get("news", [])
 
-        user_context = context.get('user_context', '').strip()
-        expert_section = ""
-        if user_context:
-            expert_section = f"""
-
-EXPERT GUIDANCE FROM COMMITTEE CHAIR:
-The following expert context has been provided. You MUST incorporate these
-considerations into your analysis — they represent domain expertise that
-should materially influence your thinking:
-{user_context}
-"""
-
-        user_kb = context.get('user_kb', '').strip()
-        kb_section = ""
-        if user_kb:
-            kb_section = f"""
-
-{user_kb}
-"""
-
-        memory_section = ""
-        agent_memory = context.get("agent_memory", [])
-        if agent_memory:
-            lessons = "\n".join(
-                f"- [{m['ticker']}] {'CORRECT' if m['was_correct'] else 'WRONG'}: {m['lesson']}"
-                for m in agent_memory
-            )
-            memory_section = f"""
-
-LESSONS FROM SIMILAR PAST ANALYSES:
-{lessons}
-Use these lessons to calibrate your conviction and avoid repeating past mistakes.
-"""
+        ctx = build_context_sections(context)
+        expert_section = ctx["expert_section"]
+        kb_section = ctx["kb_section"]
+        memory_section = ctx["memory_section"]
 
         prompt = f"""You are a senior sector analyst on an investment committee.
 Your job is to BUILD THE BULL CASE for {ticker}.

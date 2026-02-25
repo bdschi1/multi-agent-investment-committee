@@ -49,6 +49,10 @@ class GroundTruth(BaseModel):
         default_factory=list,
         description="Statements that would be hallucinations",
     )
+    must_not_claim_facts: list[str] = Field(
+        default_factory=list,
+        description="Specific factual claims that would be incorrect (for precision scoring)",
+    )
     expert_reasoning_sketch: str | None = Field(
         default=None,
         description="Expert's brief thesis for comparison",
@@ -230,6 +234,10 @@ class GradingResult(BaseModel):
     adversarial_result: dict[str, Any] | None = None
     committee_result_summary: dict[str, Any] = Field(default_factory=dict)
     run_metadata: dict[str, Any] = Field(default_factory=dict)
+    llm_judge_scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="LLM-as-judge scores per dimension (0.0-1.0), empty if not run",
+    )
 
     def to_json(self) -> dict[str, Any]:
         """Serialize for JSON output."""

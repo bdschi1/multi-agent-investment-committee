@@ -179,6 +179,8 @@ Based on Sotic & Radovanovic (2024), "Explainable AI in Finance" ([doi:10.20935/
 | 4 | **Expected Return** | ER = (1 - PFD) x earnings yield proxy |
 | 5 | **Return Driver Analysis** | Shapley value decomposition of profitability factors |
 
+In plain terms, the system estimates financial distress likelihood, identifies which metrics drive that estimate, and passes this context to the analyst agents before they begin.
+
 **Two-tier model architecture**: Altman Z-Score always works with zero configuration using proxy variables from fundamentals. When a trained XGBoost model exists in `xai/artifacts/`, it activates automatically.
 
 **Shapley values without dependencies**: The built-in Shapley calculator (`xai/shapley.py`) provides exact analytical Shapley values for the Z-Score linear model and permutation-based approximate Shapley for any other model. The optional `shap` library enhances this with waterfall plots, but explanations always work even in a minimal install.
@@ -256,6 +258,8 @@ After the PM produces its qualitative sizing heuristics, the `optimizer/` packag
 4. **Posterior returns** — BL model combines market-cap equilibrium prior with PM's view
 5. **Max-Sharpe optimization** — efficient frontier produces optimal weights
 6. **Analytics** — computed Sharpe/Sortino, OLS factor betas with t-stats, marginal contribution to risk (MCTR)
+
+In plain terms, the optimizer starts from market-implied expected returns, adjusts them based on the PM's views, and allocates accordingly — stocks the PM is more confident about get larger positions.
 
 The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
 
@@ -337,6 +341,8 @@ C = e + (1 - e)(1 - H)    (entropy-adjusted certainty)
 H = 1 - raw_confidence     (proxy for entropy)
 e = 0.01                   (floor)
 ```
+
+In plain terms, T combines the direction of the recommendation (long or short) with conviction strength into a single number between −1 and +1.
 
 `T = +0.85` means strong long conviction with high certainty. `T = -0.40` means moderate short conviction with moderate certainty.
 

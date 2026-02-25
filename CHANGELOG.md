@@ -83,7 +83,7 @@ All notable changes to this project will be documented in this file.
   - Side-by-side comparison table (LLM heuristic vs BL computed) in committee memo
   - Graceful fallback — pipeline never breaks if optimizer fails
 - **Per-node temperature routing** (`orchestrator/temperature.py`) — each pipeline stage uses a task-appropriate temperature (data: 0.1, analysis: 0.5, PM synthesis: 0.7, math: 0.0) instead of a single global setting
-  - Works across all 6 providers (Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama)
+  - Works across all 5 providers (Anthropic, Google, OpenAI, HuggingFace, Ollama)
   - User overrides via `settings.task_temperatures`
   - `with_temperature()` wrapper with graceful fallback for models that don't support the kwarg
 - 45 new tests (32 optimizer + 13 temperature routing)

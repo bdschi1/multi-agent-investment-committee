@@ -24,7 +24,6 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     HUGGINGFACE = "huggingface"
     OLLAMA = "ollama"
-    DEEPSEEK = "deepseek"
 
 
 class Settings(BaseSettings):
@@ -68,13 +67,6 @@ class Settings(BaseSettings):
     hf_model: str = Field(
         default="Qwen/Qwen2.5-72B-Instruct",
         description="HuggingFace model ID for inference",
-    )
-
-    # --- DeepSeek ---
-    deepseek_api_key: str | None = Field(default=None, description="DeepSeek API key")
-    deepseek_model: str = Field(
-        default="deepseek-chat",
-        description="DeepSeek model name",
     )
 
     # --- Ollama (local open-source) ---
@@ -166,7 +158,6 @@ class Settings(BaseSettings):
             LLMProvider.OPENAI: self.openai_model,
             LLMProvider.HUGGINGFACE: self.hf_model,
             LLMProvider.OLLAMA: self.ollama_model,
-            LLMProvider.DEEPSEEK: self.deepseek_model,
         }
         return model_map[self.llm_provider]
 
@@ -184,7 +175,6 @@ class Settings(BaseSettings):
             LLMProvider.GOOGLE: self.google_api_key,
             LLMProvider.OPENAI: self.openai_api_key,
             LLMProvider.HUGGINGFACE: self.hf_token,
-            LLMProvider.DEEPSEEK: self.deepseek_api_key,
         }
 
         # If the chosen provider has a valid key, use it

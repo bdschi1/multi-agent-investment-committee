@@ -51,7 +51,7 @@ gather_data → run_xai_analysis → [sector_analyst, short_analyst, risk_manage
 
 ### Key Patterns
 
-- **LLM interface**: All models are `callable(str) -> str` with optional `temperature` kwarg. Provider-agnostic — same pipeline works with Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama.
+- **LLM interface**: All models are `callable(str) -> str` with optional `temperature` kwarg. Provider-agnostic — same pipeline works with Anthropic, Google, OpenAI, HuggingFace, Ollama.
 - **Model factories** (`app_lib/model_factory.py`): Each provider has a factory closure. All accept `temperature` kwarg for per-node routing.
 - **`RateLimitedModel`** (`app_lib/model_factory.py`): Wraps model callables with RPM/TPM rate limiting. Passes `**kwargs` through.
 - **Result formatters** (`app_lib/formatters.py`): All `_format_*` functions for Gradio UI output.
@@ -155,7 +155,7 @@ Agent injection (in each agent's `act()` method):
 ## Settings
 
 All config via `config/settings.py` (Pydantic `BaseSettings`), loaded from `.env`:
-- `LLM_PROVIDER`: anthropic/google/openai/deepseek/huggingface/ollama
+- `LLM_PROVIDER`: anthropic/google/openai/huggingface/ollama
 - `TEMPERATURE`: global default (0.7)
 - `task_temperatures`: per-node overrides (dict)
 - Rate limiting: `RATE_LIMIT_RPM`, `RATE_LIMIT_INPUT_TPM`, `RATE_LIMIT_OUTPUT_TPM`

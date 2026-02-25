@@ -9,7 +9,6 @@ Supported LLM providers:
     - Anthropic (Claude)
     - Google (Gemini)
     - OpenAI (GPT)
-    - DeepSeek
     - HuggingFace Inference API
     - Ollama (local open-source models)
 

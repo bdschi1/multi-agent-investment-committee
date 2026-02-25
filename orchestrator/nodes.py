@@ -442,7 +442,7 @@ def report_phase1(state: dict, config: RunnableConfig) -> dict:
         f"Macro favorability: {macro_score}/10"
     ), config)
 
-    return {"debate_round": 0, "debate_skipped": False}
+    return {"debate_round": 0}
 
 
 # ---------------------------------------------------------------------------

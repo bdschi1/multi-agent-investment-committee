@@ -61,7 +61,6 @@ _PROVIDER_MAP = {
     "anthropic": LLMProvider.ANTHROPIC,
     "google": LLMProvider.GOOGLE,
     "openai": LLMProvider.OPENAI,
-    "deepseek": LLMProvider.DEEPSEEK,
     "huggingface": LLMProvider.HUGGINGFACE,
     "ollama": LLMProvider.OLLAMA,
 }

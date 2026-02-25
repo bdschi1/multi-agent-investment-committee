@@ -367,9 +367,7 @@ def run_graph(
         "traces": {},
         "conviction_timeline": [],
         "parsing_failures": [],
-        # Initialize debate state
         "debate_round": 0,
-        "debate_skipped": False,
     }
 
     final_state = compiled.invoke(initial_state, config=config)
@@ -439,7 +437,6 @@ def run_graph_phase1(
         "conviction_timeline": [],
         "parsing_failures": [],
         "debate_round": 0,
-        "debate_skipped": False,
     }
 
     final_state = compiled.invoke(initial_state, config=config)

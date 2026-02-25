@@ -15,7 +15,7 @@ class AnalysisRequest(BaseModel):
     ticker: str = Field(..., description="Stock ticker symbol (e.g. NVDA, COST)")
     provider: str = Field(
         default="anthropic",
-        description="LLM provider: anthropic, google, openai, deepseek, huggingface, ollama",
+        description="LLM provider: anthropic, google, openai, huggingface, ollama",
     )
     model_name: str | None = Field(
         default=None,

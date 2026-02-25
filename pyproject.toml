@@ -58,9 +58,6 @@ dev = [
 openai = [
     "openai>=1.50.0",
 ]
-deepseek = [
-    "openai>=1.50.0",
-]
 ollama = [
     "ollama>=0.4.0",
 ]

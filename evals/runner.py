@@ -111,26 +111,6 @@ def _create_model() -> Any:
 
         return call
 
-    elif provider == LLMProvider.DEEPSEEK:
-        from openai import OpenAI
-
-        client = OpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url="https://api.deepseek.com",
-        )
-        model_name = settings.deepseek_model
-
-        def call(prompt: str) -> str:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens_per_agent,
-            )
-            return response.choices[0].message.content
-
-        return call
-
     else:
         msg = f"Unsupported provider for eval runner: {provider}"
         raise ValueError(msg)

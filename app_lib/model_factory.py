@@ -164,34 +164,6 @@ def _prompt_requests_json(prompt: str) -> bool:
     return any(ind.lower() in prompt.lower() for ind in indicators)
 
 
-def _create_deepseek_model(model_name: str | None = None) -> callable:
-    """Create a DeepSeek callable (OpenAI-compatible API)."""
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError(
-            "OpenAI package required for DeepSeek (uses OpenAI-compatible API).\n"
-            "Run: pip install -e '.[deepseek]'"
-        ) from exc
-
-    client = OpenAI(
-        api_key=settings.deepseek_api_key or os.environ.get("DEEPSEEK_API_KEY"),
-        base_url="https://api.deepseek.com",
-    )
-    model = model_name or settings.deepseek_model
-
-    def call(prompt: str, *, temperature: float | None = None) -> str:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature if temperature is not None else settings.temperature,
-            max_tokens=settings.max_tokens_per_agent,
-        )
-        return response.choices[0].message.content
-
-    return call
-
-
 # ---------------------------------------------------------------------------
 # Unified model factory
 # ---------------------------------------------------------------------------
@@ -200,7 +172,6 @@ PROVIDER_FACTORIES = {
     LLMProvider.ANTHROPIC: _create_anthropic_model,
     LLMProvider.GOOGLE: _create_google_model,
     LLMProvider.OPENAI: _create_openai_model,
-    LLMProvider.DEEPSEEK: _create_deepseek_model,
     LLMProvider.HUGGINGFACE: _create_huggingface_model,
     LLMProvider.OLLAMA: _create_ollama_model,
 }
@@ -210,7 +181,6 @@ PROVIDER_DISPLAY = {
     "Claude (Anthropic)": LLMProvider.ANTHROPIC,
     "Gemini (Google)": LLMProvider.GOOGLE,
     "GPT (OpenAI)": LLMProvider.OPENAI,
-    "DeepSeek": LLMProvider.DEEPSEEK,
     "HuggingFace API": LLMProvider.HUGGINGFACE,
     "Ollama (Local)": LLMProvider.OLLAMA,
 }
@@ -233,10 +203,6 @@ PROVIDER_MODEL_CHOICES: dict[str, list[str]] = {
         "gpt-4o-mini",
         "gpt-4o",
     ],
-    "DeepSeek": [
-        "deepseek-chat",
-        "deepseek-reasoner",
-    ],
     "HuggingFace API": [
         "Qwen/Qwen2.5-72B-Instruct",
     ],
@@ -244,7 +210,6 @@ PROVIDER_MODEL_CHOICES: dict[str, list[str]] = {
         "llama3.1:8b",
         "llama3.2:3b",
         "llama3:70b",
-        "deepseek-r1-32b-abliterated",
     ],
 }
 
@@ -312,11 +277,6 @@ PROVIDER_RATE_LIMITS: dict[LLMProvider, dict[str, int]] = {
         "max_rpm": 300,
         "max_input_tpm": 80_000,
         "max_output_tpm": 25_000,
-    },
-    LLMProvider.DEEPSEEK: {
-        "max_rpm": 200,
-        "max_input_tpm": 50_000,
-        "max_output_tpm": 15_000,
     },
     # HuggingFace, Ollama: no wrapping needed (generous limits or local)
 }

@@ -21,7 +21,6 @@ class TestResolveProvider:
             "google_api_key": None,
             "openai_api_key": None,
             "hf_token": None,
-            "deepseek_api_key": None,
         }
         defaults.update(overrides)
         return Settings(**defaults)
@@ -51,14 +50,6 @@ class TestResolveProvider:
             openai_api_key="sk-test",
         )
         assert s.resolve_provider() == LLMProvider.OPENAI
-
-    def test_deepseek_key_returns_deepseek(self):
-        """DeepSeek selected with valid key → returns DeepSeek."""
-        s = self._make_settings(
-            llm_provider=LLMProvider.DEEPSEEK,
-            deepseek_api_key="test-deepseek-key",
-        )
-        assert s.resolve_provider() == LLMProvider.DEEPSEEK
 
     def test_huggingface_key_returns_huggingface(self):
         """HuggingFace selected with valid token → returns HuggingFace."""
@@ -90,14 +81,6 @@ class TestResolveProvider:
         )
         assert s.resolve_provider() == LLMProvider.GOOGLE
 
-    def test_selected_provider_no_key_falls_to_deepseek(self):
-        """OpenAI selected but no OpenAI key, DeepSeek key exists → returns DeepSeek."""
-        s = self._make_settings(
-            llm_provider=LLMProvider.OPENAI,
-            deepseek_api_key="test-deepseek-key",
-        )
-        assert s.resolve_provider() == LLMProvider.DEEPSEEK
-
     def test_selected_provider_no_key_no_others_falls_to_ollama(self):
         """Google selected but no keys at all → falls back to Ollama."""
         s = self._make_settings(llm_provider=LLMProvider.GOOGLE)
@@ -127,23 +110,14 @@ class TestGetActiveModel:
         s = Settings(llm_provider=LLMProvider.OLLAMA)
         assert s.get_active_model() == s.ollama_model
 
-    def test_deepseek_model(self):
-        s = Settings(llm_provider=LLMProvider.DEEPSEEK)
-        assert s.get_active_model() == s.deepseek_model
-
-    def test_custom_deepseek_model(self):
-        s = Settings(llm_provider=LLMProvider.DEEPSEEK, deepseek_model="deepseek-reasoner")
-        assert s.get_active_model() == "deepseek-reasoner"
-
 
 class TestLLMProviderEnum:
     """Test LLMProvider enum values."""
 
     def test_all_providers_present(self):
         providers = {p.value for p in LLMProvider}
-        expected = {"anthropic", "google", "openai", "huggingface", "ollama", "deepseek"}
+        expected = {"anthropic", "google", "openai", "huggingface", "ollama"}
         assert providers == expected
 
     def test_string_enum(self):
-        assert LLMProvider.DEEPSEEK == "deepseek"
         assert LLMProvider.OLLAMA == "ollama"

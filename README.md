@@ -78,7 +78,6 @@ pytest tests/ -v        # 603 tests
 | Anthropic | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` in `.env` |
 | Google | `gemini-2.0-flash` | `GOOGLE_API_KEY` in `.env` |
 | OpenAI | `gpt-4o-mini` | `pip install -e ".[openai]"` + `OPENAI_API_KEY` |
-| DeepSeek | `deepseek-chat` | `pip install -e ".[deepseek]"` + `DEEPSEEK_API_KEY` |
 | HuggingFace | `Qwen/Qwen2.5-72B-Instruct` | `HF_TOKEN` in `.env` |
 | Ollama | `llama3.1:8b` | `pip install -e ".[ollama]"` + `ollama serve` |
 
@@ -364,7 +363,7 @@ Since the LLM interface is provider-agnostic (`callable(str) -> str`), token-lev
 | `run_portfolio_manager` | 0.7 | Narrative flow, connecting themes |
 | `run_optimizer` | 0.0 | Deterministic computation (no LLM calls) |
 
-Works across all providers (Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama). Override per-node via `settings.task_temperatures`.
+Works across all providers (Anthropic, Google, OpenAI, HuggingFace, Ollama). Override per-node via `settings.task_temperatures`.
 
 </details>
 
@@ -638,7 +637,7 @@ python -m evals report                        # generate report from results/
 
 [LangGraph](https://github.com/langchain-ai/langgraph) · [Gradio](https://www.gradio.app/) · [Pydantic](https://docs.pydantic.dev/) · [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) · [FastAPI](https://fastapi.tiangolo.com/) · [yfinance](https://github.com/ranaroussi/yfinance) · [pytest](https://docs.pytest.org/) · [SHAP](https://github.com/shap/shap) · [XGBoost](https://xgboost.readthedocs.io/)
 
-LLM providers: Anthropic, Google, OpenAI, DeepSeek, HuggingFace, Ollama
+LLM providers: Anthropic, Google, OpenAI, HuggingFace, Ollama
 
 ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white)
 ![Gradio](https://img.shields.io/badge/Gradio-F97316?style=flat&logo=gradio&logoColor=white)

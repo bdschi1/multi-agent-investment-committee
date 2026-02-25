@@ -80,7 +80,6 @@ class CommitteeState(TypedDict, total=False):
     short_rebuttal: Rebuttal | None     # Short Analyst's rebuttal (new)
     risk_rebuttal: Rebuttal | None
     debate_round: int
-    debate_skipped: bool
 
     # -- HITL: PM guidance from user review (Phase C) --
     pm_guidance: str | None

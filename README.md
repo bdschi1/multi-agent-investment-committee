@@ -27,7 +27,7 @@ An AI system that replicates an institutional investment committee. You enter a 
 Under the hood, a quantitative pre-screen estimates financial distress risk and expected returns before the agents run. After the agents reach a conclusion, a portfolio optimizer converts their qualitative views into concrete portfolio weights. Every signal is stored for historical backtesting.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-603%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-687%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Not financial advice.** All output is AI-generated. Do not use for investment decisions.
@@ -36,23 +36,35 @@ Under the hood, a quantitative pre-screen estimates financial distress risk and 
 
 ## Pipeline at a Glance
 
-```mermaid
-flowchart LR
-    A["User Input<br/><sub>ticker + guidance + docs</sub>"] --> B["Data Gathering<br/><sub>yfinance, RSS, metrics</sub>"]
-    B --> C["XAI Pre-Screen<br/><sub>PFD, Shapley, ER</sub>"]
-
-    C --> D1["Long Analyst"]
-    C --> D2["Short Analyst"]
-    C --> D3["Risk Manager"]
-    C --> D4["Macro Strategist"]
-
-    D1 & D2 & D3 --> E["Adversarial Debate<br/><sub>Long vs Short + RM sizing</sub>"]
-
-    D4 --> F
-    E --> F["Portfolio Manager<br/><sub>synthesis + T signal</sub>"]
-
-    F --> G["Black-Litterman<br/><sub>BL weights, Sharpe, MCTR</sub>"]
-    G --> H["Committee Memo"]
+```
+╔═══════════════════════════════════════════════════════╗
+║                    USER INPUT                         ║
+║            ticker · guidance · documents              ║
+╚═══════════════════════════╤═══════════════════════════╝
+                            ▼
+┌─ PHASE 1 ─────────────────────────────────────────────┐
+│  Data Gathering ──► XAI Pre-Screen                    │
+│  (yfinance, RSS)    (distress, Shapley, exp. return)  │
+└───────────────────────────┬───────────────────────────┘
+            ┌───────┬───────┴───────┬───────┐
+            ▼       ▼               ▼       ▼
+┌─ PHASE 2 ─────────────────────────────────────────────┐
+│   Long      Short        Risk        Macro            │
+│   Analyst   Analyst      Manager     Strategist       │
+│      └────┬────┘           │            │             │
+│           ▼                │            │             │
+│     Adversarial Debate ◄───┘            │             │
+└───────────┬─────────────────────────────┼─────────────┘
+            └─────────────┬───────────────┘
+                          ▼
+┌─ PHASE 3 ─────────────────────────────────────────────┐
+│  Portfolio Manager ──► Portfolio Optimizer              │
+│  (T signal, memo)      (BL / ensemble / 4 others)     │
+└───────────────────────────┬───────────────────────────┘
+                            ▼
+                    ┌───────────────┐
+                    │ COMMITTEE MEMO│
+                    └───────────────┘
 ```
 
 Each agent follows a **THINK → PLAN → ACT → REFLECT** loop — similar to how a human analyst would frame the question, plan the analysis, write the conclusion, then reconsider. Every step is captured in a reasoning trace visible in the UI. A typical run makes ~25 LLM calls and takes 90-120 seconds depending on provider.
@@ -65,13 +77,20 @@ Each agent follows a **THINK → PLAN → ACT → REFLECT** loop — similar to 
 git clone https://github.com/bdschi1/multi-agent-investment-committee.git
 cd multi-agent-investment-committee
 
+cp .env.example .env   # add API key(s)
+./run.sh               # setup + launch Gradio UI at http://localhost:7860
+```
+
+Or manually:
+
+```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-
-cp .env.example .env   # add API key(s)
 python app.py           # http://localhost:7860
-pytest tests/ -v        # 603 tests
+pytest tests/ -v        # 687 tests
 ```
+
+Run `./run.sh help` for all commands (`setup`, `app`, `api`, `test`).
 
 | Provider | Default Model | Setup |
 |----------|--------------|-------|
@@ -87,7 +106,7 @@ Switch providers at runtime via the UI dropdown or `LLM_PROVIDER` in `.env`.
 
 <div align="center">
 
-[Agents](#agents) · [How It Works](#how-it-works) · [Vol Intelligence](#volatility-intelligence) · [Optimizer](#black-litterman-optimizer) · [Backtest](#signal-analytics--backtesting) · [Agent Memory](#agent-memory--post-trade-reflection) · [API](#rest-api) · [Evals](#eval-harness) · [Architecture](#architecture)
+[Agents](#agents) · [How It Works](#how-it-works) · [Vol Intelligence](#volatility-intelligence) · [Optimizer](#portfolio-optimizer) · [Backtest](#signal-analytics--backtesting) · [Agent Memory](#agent-memory--post-trade-reflection) · [API](#rest-api) · [Evals](#eval-harness) · [Architecture](#architecture)
 
 </div>
 
@@ -95,21 +114,21 @@ Switch providers at runtime via the UI dropdown or `LLM_PROVIDER` in `.env`.
 
 ## Agents
 
-```mermaid
-flowchart TD
-    LA["<b>Long Analyst</b><br/><sub>Bull thesis, sentiment,<br/>return decomposition</sub>"]
-    SA["<b>Short Analyst</b><br/><sub>Short thesis, alpha/beta<br/>classification, borrow</sub>"]
-    RM["<b>Risk Manager</b><br/><sub>Position sizing, stop-loss,<br/>stress scenarios</sub>"]
-    MA["<b>Macro Strategist</b><br/><sub>Vol regime, net exposure,<br/>portfolio guardrails</sub>"]
-    PM["<b>Portfolio Manager</b><br/><sub>Synthesis, T signal,<br/>conviction map</sub>"]
-
-    LA <-->|"Adversarial<br/>Debate"| SA
-    RM -.->|"Sizing<br/>Commentary"| LA
-    RM -.->|"Sizing<br/>Commentary"| SA
-    LA --> PM
-    SA --> PM
-    RM --> PM
-    MA --> PM
+```
+  Long Analyst ◄── Adversarial Debate ──► Short Analyst
+       │                  ▲                     │
+       │            Risk Manager                │
+       │         (sizing commentary)            │
+       │                                        │
+       ▼                  ▼                     ▼
+  ┌─────────────────────────────────────────────────┐
+  │              Portfolio Manager                   │
+  │       (synthesis + T signal + conviction map)    │
+  └─────────────────────────────────────────────────┘
+                          ▲
+                          │
+                   Macro Strategist
+              (vol regime, net exposure)
 ```
 
 | Agent | Role | Key Output |
@@ -145,7 +164,7 @@ The system follows the same workflow as a real investment committee: gather data
 2. **Parallel Analysis** — Four agents analyze simultaneously with XAI context injected
 3. **Adversarial Debate** — Long vs Short with structured rebuttals; Risk Manager provides sizing commentary
 4. **PM Synthesis** — Portfolio Manager weighs all evidence, produces T signal + committee memo
-5. **Portfolio Optimization** — Black-Litterman computes real weights from PM conviction
+5. **Portfolio Optimization** — Selected optimizer (BL, HRP, Mean-Var, Min-Var, Risk Parity, or Equal Weight) computes real weights
 6. **Signal Persistence** — Every signal stored in SQLite for backtesting and analytics
 
 Each pipeline node runs at a task-appropriate "temperature" — an LLM setting that controls how creative vs. deterministic the output is. Data extraction uses low temperature (stick to facts), while the PM uses higher temperature (connect themes, weigh trade-offs).
@@ -159,14 +178,22 @@ Each pipeline node runs at a task-appropriate "temperature" — an LLM setting t
 
 Before any AI agent writes a word, the system runs a quantitative check: how likely is this company to face financial distress, and what's driving that risk? The results — along with which financial metrics matter most and why — are passed to the agents so their analysis starts from a data-grounded baseline rather than pure LLM reasoning.
 
-```mermaid
-flowchart LR
-    F["Fundamentals<br/><sub>12 features</sub>"] --> PFD["<b>Step 1</b><br/>PFD Estimation<br/><sub>Altman Z / XGBoost</sub>"]
-    PFD --> SHAP1["<b>Step 2</b><br/>Risk Factors<br/><sub>Shapley decomposition</sub>"]
-    SHAP1 --> SCR["<b>Step 3</b><br/>Distress Screen<br/><sub>PFD &gt; threshold?</sub>"]
-    SCR --> ER["<b>Step 4</b><br/>Expected Return<br/><sub>ER = (1-PFD) × yield</sub>"]
-    ER --> SHAP2["<b>Step 5</b><br/>Return Drivers<br/><sub>Shapley decomposition</sub>"]
-    SHAP2 --> NAR["Narrative<br/>→ Agents"]
+```
+┌─ PHASE 1 ── Estimation ─────────────────────────────────┐
+│  Fundamentals ──► PFD Estimation ──► Risk Factors        │
+│  (12 features)    (Altman Z /        (Shapley            │
+│                    XGBoost)           decomposition)      │
+└───────────────────────────────┬───────────────────────────┘
+                                ▼
+┌─ PHASE 2 ── Screening + Return ─────────────────────────┐
+│  Distress Screen ──► Expected Return ──► Return Drivers  │
+│  (PFD > threshold?)  (ER = (1-PFD)      (Shapley        │
+│                       × yield)            decomposition)  │
+└───────────────────────────────┬───────────────────────────┘
+                                ▼
+                        ┌───────────────┐
+                        │    AGENTS     │
+                        └───────────────┘
 ```
 
 Based on Sotic & Radovanovic (2024), "Explainable AI in Finance" ([doi:10.20935/AcadAI8017](https://doi.org/10.20935/AcadAI8017)).
@@ -230,40 +257,63 @@ Each agent receives the relevant subset: the Risk Manager uses vol for sizing an
 
 ---
 
-### Black-Litterman Optimizer
+### Portfolio Optimizer
 
 <details>
-<summary>pypfopt Black-Litterman model that turns PM conviction into portfolio weights</summary>
+<summary>Seven optimization strategies selectable via UI dropdown — from views-based (Black-Litterman) to ensemble cross-strategy analytics</summary>
 
-The optimizer translates the PM's qualitative recommendation ("I'm 80% confident this stock outperforms by 5%") into actual portfolio weights across the target stock, its sector peers, and broad market indices. It starts from market-consensus expectations and adjusts them based on the PM's views — stocks the PM is more confident about get larger tilts.
+After the PM produces its recommendation, the optimizer converts qualitative conviction into concrete portfolio weights across the target stock, its sector peers, and broad market indices. You choose the optimization method from a dropdown in the UI — each uses the same universe and covariance infrastructure but differs in how weights are computed.
 
-```mermaid
-flowchart TD
-    U["Universe Construction<br/><sub>target + 5 peers + ETF + SPY</sub>"] --> COV["Covariance Estimation<br/><sub>Ledoit-Wolf shrinkage</sub>"]
-    COV --> EQ["Equilibrium Prior<br/><sub>market-cap weights</sub>"]
+| Strategy | How it works | Uses PM views? |
+|----------|-------------|----------------|
+| **Black-Litterman** (default) | Adjusts market-implied expected returns using PM's alpha view and conviction-scaled confidence, then runs max-Sharpe optimization | Yes |
+| **Hierarchical Risk Parity** | Clusters assets by correlation structure and allocates via inverse-variance weighting down the tree — no covariance inversion, more robust to estimation error | No |
+| **Mean-Variance (Max Sharpe)** | Classic Markowitz — uses historical expected returns directly, finds the tangency portfolio on the efficient frontier | No |
+| **Minimum Variance** | Minimizes portfolio variance regardless of expected returns — purely risk-based, no return estimates needed | No |
+| **Risk Parity (ERC)** | Equal risk contribution — each asset contributes the same fraction of total portfolio risk, solved via SLSQP | No |
+| **Equal Weight (1/N)** | Simple 1/N allocation — surprisingly hard to beat out-of-sample and useful as a baseline | No |
+| **Ensemble (All Strategies)** | Runs all 6 strategies on shared inputs, produces blended allocation + cross-strategy analytics | Mixed |
 
-    PMV["PM Conviction<br/><sub>alpha view + confidence</sub>"] --> BL
-    EQ --> BL["Black-Litterman Model<br/><sub>posterior returns</sub>"]
-    COV --> BL
+In plain terms, Black-Litterman incorporates the PM's conviction into market-consensus expectations, HRP uses correlation clustering instead of covariance inversion, and Risk Parity equalizes each asset's contribution to portfolio risk. The simpler methods (min-variance, equal weight) serve as useful benchmarks. Ensemble runs everything and compares.
 
-    BL --> EF["Efficient Frontier<br/><sub>max-Sharpe weights</sub>"]
-    EF --> AN["Analytics<br/><sub>Sharpe, Sortino, betas, MCTR</sub>"]
+```
+┌─ SHARED ── Universe + Covariance (built once) ────────────┐
+│  Universe Construction    Covariance Estimation             │
+│  (target + 5 peers        (Ledoit-Wolf shrinkage)          │
+│   + ETF + SPY)                                             │
+└──────────────┬────────────────┬────────────────────────────┘
+               └────────┬───────┘
+                        ▼
+┌─ STRATEGY ── (selected via UI dropdown) ──────────────────┐
+│  BL / HRP / Mean-Var / Min-Var / Risk Parity / Equal Wt   │
+│  ── OR ── Ensemble (runs all 6 on shared inputs)           │
+└───────────────────────────────┬────────────────────────────┘
+                                ▼
+┌─ SHARED ── Analytics ─────────────────────────────────────┐
+│  Sharpe / Sortino / Factor Betas (OLS) / MCTR             │
+│  Ensemble adds: Consensus Matrix, Divergence Flags,        │
+│  Blended Allocation, Layered Narrative                     │
+└───────────────────────────────────────────────────────────┘
 ```
 
-After the PM produces its qualitative sizing heuristics, the `optimizer/` package runs a [pypfopt](https://github.com/robertmartin8/PyPortfolioOpt) Black-Litterman model:
+**Ensemble mode** is what most sophisticated funds use — layered approaches where different strategies serve different roles:
 
-1. **Universe construction** — target stock + 5 sector peers + sector ETF + SPY (7-8 assets)
-2. **Covariance estimation** — Ledoit-Wolf shrinkage on 2 years of daily returns
-3. **View extraction** — PM's alpha estimate becomes the BL absolute view; bull/bear conviction spread scales view confidence (omega)
-4. **Posterior returns** — BL model combines market-cap equilibrium prior with PM's view
-5. **Max-Sharpe optimization** — efficient frontier produces optimal weights
-6. **Analytics** — computed Sharpe/Sortino, OLS factor betas with t-stats, marginal contribution to risk (MCTR)
+| Strategy | Ensemble Role | Blend Weight |
+|----------|--------------|-------------|
+| Black-Litterman | Core Allocation — PM views-driven, highest information content | 35% |
+| Risk Parity | Sanity Check — risk-balanced, no return assumptions | 25% |
+| Minimum Variance | Defensive Overlay — lowest-vol positioning | 20% |
+| HRP | Reference — correlation-clustered alternative | 10% |
+| Mean-Variance | Reference — classical Markowitz benchmark | 5% |
+| Equal Weight | Reference — naive diversification baseline | 5% |
 
-In plain terms, the optimizer starts from market-implied expected returns, adjusts them based on the PM's views, and allocates accordingly — stocks the PM is more confident about get larger positions.
+Ensemble output includes: a strategy comparison table (side-by-side vol, Sharpe, Sortino, HHI), a weight consensus matrix showing where strategies agree or disagree, divergence flags for tickers with high agreement (std < 2pp) or disagreement (std > 10pp), a blended allocation with risk contributions, and a layered narrative comparing core vs sanity check vs defensive overlay positioning.
 
-The report displays a **side-by-side comparison** of LLM heuristic estimates vs. computed values. If the optimizer fails (e.g., insufficient price data), the pipeline continues gracefully with heuristics as primary reference.
+All strategies share post-optimization analytics: Sharpe/Sortino ratios, OLS factor betas with t-stats, and marginal contribution to risk (MCTR). The report adapts to the selected method — BL results include a heuristic-vs-computed comparison table; non-BL results show a simpler risk metrics view.
 
-**Note, BL allows any model estimation error to become apparent as allocation choices may magnify poor assumptions.**
+If any optimizer fails (e.g., insufficient price data, solver non-convergence), the pipeline continues gracefully with heuristics as primary reference. Mean-Variance falls back to min-volatility when no asset's expected return exceeds the risk-free rate. In ensemble mode, individual strategy failures are logged and skipped — the ensemble continues with remaining strategies.
+
+Configure the default via `.env` (`OPTIMIZER_METHOD=ensemble`) or select at runtime from the UI dropdown.
 
 </details>
 
@@ -276,15 +326,21 @@ The report displays a **side-by-side comparison** of LLM heuristic estimates vs.
 
 Every recommendation the system produces is stored in a database. Over time, you can measure whether higher-conviction calls actually produce better returns, how quickly the signal decays, and which agents contributed most to the final call — the same kind of post-trade attribution a fund would run on its analysts.
 
-```mermaid
-flowchart LR
-    SIG["Committee Signal<br/><sub>T, conviction, direction</sub>"] --> DB[("SQLite<br/><sub>signals table</sub>")]
-    DB --> BT["Backtest<br/><sub>fill returns, P&L</sub>"]
-    DB --> CAL["Calibration<br/><sub>conviction buckets</sub>"]
-    DB --> AD["Alpha Decay<br/><sub>info coefficient by horizon</sub>"]
-    DB --> BM["Benchmark<br/><sub>vs SPY, momentum</sub>"]
-    DB --> PORT["Portfolio<br/><sub>multi-asset weights</sub>"]
-    DB --> EXP["Attribution<br/><sub>agent decomposition</sub>"]
+```
+┌─ PERSISTENCE ────────────────────────────────────────────┐
+│  Committee Signal ──► SQLite DB                           │
+│  (T, conviction, direction)                               │
+└───────────────────────────────┬───────────────────────────┘
+         ┌──────┬──────┬────────┼────────┬──────┐
+         ▼      ▼      ▼        ▼        ▼      ▼
+┌─ ANALYTICS ──────────────────────────────────────────────┐
+│  Backtest       Calibration    Alpha Decay                │
+│  (returns,      (conviction    (IC by                     │
+│   P&L)           buckets)       horizon)                  │
+│  Benchmark      Portfolio      Attribution                │
+│  (vs SPY,       (multi-asset   (agent                     │
+│   momentum)      weights)       decomposition)            │
+└──────────────────────────────────────────────────────────┘
 ```
 
 | Module | What it does |
@@ -396,25 +452,17 @@ Format is `provider:model_name`. If no colon, the current provider is used with 
 
 ## Architecture
 
-```mermaid
-graph TD
-    APP["<b>app.py</b><br/><sub>Gradio UI</sub>"] --> APPLIB["<b>app_lib/</b><br/><sub>Model Factory + Formatters</sub>"]
-    APP --> ORCH["<b>orchestrator/</b><br/><sub>LangGraph StateGraph</sub>"]
-    APP --> TOOLS["<b>tools/</b><br/><sub>Data + Aggregation</sub>"]
+```
+app.py (Gradio UI) ──┬──► app_lib/        (Model Factory + Formatters)
+                     ├──► orchestrator/   (LangGraph StateGraph)
+                     │      ├──► agents/      (5 AI Agents) ──► tools/
+                     │      ├──► xai/         (Explainable AI)
+                     │      └──► optimizer/   (BL / Ensemble / 4 others) ──► tools/
+                     └──► tools/          (Data + Aggregation)
 
-    ORCH --> AGENTS["<b>agents/</b><br/><sub>5 AI Agents</sub>"]
-    ORCH --> XAI["<b>xai/</b><br/><sub>Explainable AI</sub>"]
-    ORCH --> OPT["<b>optimizer/</b><br/><sub>Black-Litterman</sub>"]
-
-    AGENTS --> TOOLS
-    OPT --> TOOLS
-
-    API["<b>api/</b><br/><sub>FastAPI</sub>"] --> ORCH
-    BT["<b>backtest/</b><br/><sub>Analytics</sub>"] --> TOOLS
-
-    CONFIG["<b>config/</b><br/><sub>Settings</sub>"] -.-> APP
-    CONFIG -.-> ORCH
-    CONFIG -.-> AGENTS
+api/ (FastAPI) ──► orchestrator/
+backtest/ (Analytics) ──► tools/
+config/ (Settings) ···► app.py, orchestrator/, agents/
 ```
 
 <details>
@@ -443,9 +491,11 @@ multi-agent-investment-committee/
 │   ├── memory.py                # Session memory store + BM25 retrieval
 │   └── reasoning_trace.py       # Trace rendering
 ├── optimizer/
-│   ├── bl_optimizer.py          # Main BL pipeline (universe → cov → views → BL → frontier)
-│   ├── node.py                  # LangGraph node wrapper with graceful fallback
-│   ├── models.py                # OptimizationResult, OptimizerFallback, FactorExposure, RiskContribution
+│   ├── bl_optimizer.py          # Shared pipeline (universe → cov → strategy → analytics) + BL wrapper
+│   ├── strategies.py            # 6 strategies: BL, HRP, Mean-Var, Min-Var, Risk Parity, Equal Weight
+│   ├── ensemble.py              # Ensemble meta-strategy — runs all 6, blends, consensus + divergence
+│   ├── node.py                  # LangGraph node — reads optimizer_method from config
+│   ├── models.py                # OptimizationResult, EnsembleResult, OptimizerFallback, + data models
 │   ├── views.py                 # Extract BL views (P, Q, omega) from PM output
 │   ├── universe.py              # Build asset universe (target + peers + sector ETF + SPY)
 │   ├── covariance.py            # Ledoit-Wolf covariance shrinkage via pypfopt
@@ -507,7 +557,7 @@ multi-agent-investment-committee/
 │   └── run_permutations.py      # Agent permutation testing
 ├── config/
 │   └── settings.py              # Pydantic settings with .env + per-node temperature overrides + XAI config
-├── tests/                       # 603 tests
+├── tests/                       # 687 tests
 ├── .env.example                 # Environment variable template
 ├── CHANGELOG.md                 # Version history
 └── pyproject.toml
@@ -518,31 +568,16 @@ multi-agent-investment-committee/
 <details>
 <summary><b>Data providers</b></summary>
 
-```mermaid
-classDiagram
-    class BaseDataProvider {
-        <<abstract>>
-        +get_price_data()
-        +get_fundamentals()
-        +get_insider_data()
-    }
-    class YahooProvider {
-        Default · zero config
-    }
-    class BloombergProvider {
-        Requires blpapi
-    }
-    class IBProvider {
-        Requires ib_insync
-    }
-    BaseDataProvider <|-- YahooProvider
-    BaseDataProvider <|-- BloombergProvider
-    BaseDataProvider <|-- IBProvider
+```
+            BaseDataProvider (ABC)
+           ┌────────┼────────┐
+           │        │        │
+           ▼        ▼        ▼
+    YahooProvider  BloombergProvider  IBProvider
+    (default,      (requires          (requires
+     zero config)   blpapi)            ib_insync)
 
-    class ProviderFactory {
-        +get_provider(name) BaseDataProvider
-    }
-    ProviderFactory --> BaseDataProvider
+    ProviderFactory.get_provider(name) → BaseDataProvider
 ```
 
 Market data defaults to yfinance. The `tools/data_providers/` package implements a provider abstraction (`BaseDataProvider` ABC) with a factory pattern. Bloomberg and Interactive Brokers providers are available as optional installs:
@@ -689,6 +724,7 @@ This system draws on academic research in multi-agent financial AI, explainabili
 - v3.9: XAI pre-screen module — Altman Z-Score/XGBoost distress estimation, built-in Shapley value decomposition (exact linear + permutation-based), expected return computation, dual explainability (feature-level + agent-level). Based on Sotic & Radovanovic (2024)
 - v4.0: Five-agent architecture — dedicated Short Analyst (alpha/beta short classification, borrow assessment, event path), Risk Manager refocused on sizing/structuring (position structure, stop-loss, stress scenarios, correlation flags), Long vs Short adversarial debate with Risk Manager commentary, PM conviction change map, 4-way parallel fan-out
 - v4.1: Per-node model routing, agent memory with BM25 retrieval, volatility surface generation (Heston/CEV), vol intelligence pipeline, realized vol signals, IV vs HV assessment, app.py modularization (`app_lib/` package), shared context injection helper, Alpha Vantage provider
+- v4.2: Ensemble multi-strategy optimizer — runs all 6 strategies on shared universe/covariance, produces blended allocation (BL 35% / RP 25% / MinVar 20% / HRP 10% / MV 5% / EW 5%), weight consensus matrix, divergence flags, layered narrative (core vs sanity check vs defensive overlay), strategy comparison table with HHI concentration metric. 687 tests.
 
 </details>
 

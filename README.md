@@ -28,6 +28,11 @@ Under the hood, a quantitative pre-screen estimates financial distress risk and 
 
 This is a continually developed project. Features, interfaces, and test coverage expand over time as new research ideas and workflow needs arise.
 
+**Key questions this project answers:**
+- *Should I be long or short this stock, and at what size?*
+- *What does each analytical perspective — bull, bear, risk, macro — say independently?*
+- *Do the quantitative pre-screen and qualitative agent views agree?*
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-687%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)

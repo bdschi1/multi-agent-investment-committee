@@ -637,9 +637,9 @@ uvicorn api.main:app --reload --port 8000
 ## Eval Harness
 
 <details>
-<summary>Ground-truth evaluation framework for grading committee output against known historical scenarios</summary>
+<summary>Ground-truth evaluation framework with 9 scenarios for grading committee output against known historical outcomes</summary>
 
-The eval harness answers the question: "If we had run this system before a known event (e.g., SVB collapse, NVDA's AI run), would it have gotten the direction right and identified the key risks?" Scenarios with known outcomes are replayed and graded on six dimensions.
+The eval harness answers the question: "If we had run this system before a known event (e.g., SVB collapse, NVDA's AI run), would it have gotten the direction right and identified the key risks?" Nine scenarios with known outcomes are replayed and graded on six dimensions. Scenarios span single-stock theses, multi-name competitive dynamics, macro/institutional risk, and sector-level valuation dislocations.
 
 **Grading dimensions** (6 dimensions, 100 total points):
 - Direction accuracy (25) — did the committee get the direction right?
@@ -651,11 +651,21 @@ The eval harness answers the question: "If we had run this system before a known
 
 Each dimension maps to a 5-point scale (Fail/Poor/Adequate/Good/Excellent) with dimension-specific anchor definitions for interpretability.
 
-**Scenarios included** (ground truth filled, ready to run):
-- NVDA mid-2024 (AI datacenter thesis, +25% actual)
-- SVB pre-collapse (bank run risk, -100% actual)
-- META late 2022 (deep value rerating, +450% actual)
-- AAPL adversarial (fabricated 80% revenue growth injection)
+**Scenarios included** (9 ground-truth + 4 adversarial/red-team, ready to run):
+
+| Scenario | Ticker(s) | Theme |
+|----------|-----------|-------|
+| `nvda_2024_ai_boom` | NVDA | AI datacenter thesis, +25% actual |
+| `svb_2023_collapse` | SIVB | Bank run risk, -100% actual |
+| `meta_2022_rerating` | META | Deep value rerating, +450% actual |
+| `lly_nvo_obesity_therapeutics` | LLY, NVO | GLP-1 competitive dynamics |
+| `ai_capex_bubble_or_boom` | MSFT, GOOGL, AMZN, META | AI infrastructure capex sustainability |
+| `fed_independence_institutional_risk` | TLT, SPY | Fed independence / institutional risk |
+| `software_valuation_reset_2026` | CRM, NOW, SNOW | Enterprise software valuation dislocation |
+| `consumer_cohort_divergence_2026` | PEP | Consumer income bifurcation |
+| `biotech_ma_cycle_2026` | VKTX | Biotech M&A cycle / takeout thesis |
+
+Adversarial/red-team scenarios test whether agents detect injected or fabricated data (e.g., inflated earnings, pump-and-dump language, insider tipping signals, market manipulation framing).
 
 Adding a scenario: copy `evals/scenarios/_template.yaml`, fill the fields, run.
 

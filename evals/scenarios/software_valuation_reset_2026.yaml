@@ -1,0 +1,116 @@
+# ===========================================================================
+# Software Valuation Reset — AI Disruption Risk (Feb 2026)
+# ===========================================================================
+
+id: "software_valuation_reset_2026"
+title: "Software Valuation Reset — AI Disruption Risk"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "NOW"
+as_of_date: "2026-02-10"
+as_of_context: >
+  Software stocks plunged 15% in one week and are down 29% from September
+  2025 highs. Forward P/E compressed from 35x to 20x — the lowest absolute
+  level since 2014. The premium to the average S&P 500 stock is at the
+  smallest gap since 2010. The catalyst was the announcement of Claude
+  Cowork and OpenAI's Frontier, AI agent orchestration platforms that raised
+  concerns traditional SaaS could be "relegated to passive data stores."
+  However, current profit margins and consensus revenue growth estimates
+  remain at highest levels in 20+ years, roughly 2x comparable S&P 500
+  fundamentals. GS initiated software coverage with Buy on MSFT, ORCL,
+  NOW and Sell on ADBE, DDOG. GS SMID framework evaluates orchestration
+  risk, seat-vs-consumption monetization exposure, system-of-record
+  ownership, and data/integration moat. GS concludes "most of our coverage
+  sits in more insulated layers of the stack." MSCI World Momentum
+  delivered its 5th largest selloff vs market since 1995 on a single day.
+  GS Prime Services shows hedge funds reduced software exposure but
+  remain net long; large-cap mutual funds had already moved underweight
+  software in mid-2025. Historical analogy: newspaper stocks and tobacco
+  litigation — share price stabilization required stability in earnings
+  outlook, not just narrative resolution.
+
+tags:
+  - technology
+  - software
+  - valuation
+  - AI_disruption
+  - momentum_unwind
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 7.0]
+  actual_outcome: >
+    The software selloff proved to be a buying opportunity for
+    infrastructure-layer and system-of-record companies. NOW rallied
+    as its agent orchestration positioning was validated by enterprise
+    adoption trends. Application-layer companies with seat-based models
+    continued to underperform. The sector bifurcation between AI-enabled
+    infrastructure winners and disruption-exposed application providers
+    became the dominant investment theme. Forward P/E multiples partially
+    recovered but remained below pre-selloff levels.
+  actual_return_pct: 22.0
+  must_find_facts:
+    - "software stocks down 29% from September 2025 highs"
+    - "forward P/E compressed from 35x to 20x"
+    - "lowest absolute P/E level since 2014"
+    - "Claude Cowork and OpenAI Frontier as catalysts"
+    - "profit margins and revenue growth at 20-year highs"
+    - "GS Buy on MSFT ORCL NOW and Sell on ADBE DDOG"
+    - "hedge funds reduced software exposure but remain net long"
+  must_find_risks:
+    - "AI agents could relegate traditional SaaS to passive data stores"
+    - "momentum unwind creating forced selling pressure"
+    - "multiple compression may reflect expectations of earnings estimate cuts"
+    - "newspaper and tobacco litigation analogy suggests stabilization requires earnings clarity"
+    - "seat-based monetization models vulnerable to AI agent displacement"
+    - "mutual funds already underweight before selloff"
+  must_not_claim:
+    - "software earnings have already been cut"
+    - "all software companies are equally disrupted"
+    - "the selloff is over"
+    - "AI agents have replaced enterprise software"
+  expert_reasoning_sketch: >
+    Moderate conviction BUY on NOW as the best-positioned software name
+    in the AI disruption cycle. The selloff created a genuine valuation
+    dislocation — 20x forward P/E for companies with 2x the revenue
+    growth and margins of the S&P 500 average is historically attractive.
+    But the position requires differentiation within software: the key
+    framework is orchestration risk, system-of-record ownership, and
+    monetization model. NOW is well-positioned as an agent orchestration
+    layer with strong system-of-record ownership in IT service management.
+    ADBE and DDOG face more direct disruption risk from horizontal AI
+    platforms. The newspaper/tobacco analogy is instructive — narrative
+    fear can compress multiples ahead of any fundamental impairment, and
+    the recovery requires earnings stability, not narrative resolution.
+    Position sizing should be moderate given the momentum unwind is still
+    in progress and forced selling may not be complete. The risk is that
+    this is the beginning of a structural derating of the entire software
+    sector, similar to what happened to telecom in 2001. The counter-
+    argument is that software fundamentals remain at 20-year highs and
+    the selloff is price-driven, not earnings-driven.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Treats all software companies as equivalent"
+    - "Ignores the AI disruption thesis entirely"
+    - "Fails to mention valuation metrics"
+    - "Claims the software selloff is purely technical"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-27"
+  notes: "Tests whether the committee can differentiate between disruption-exposed and disruption-insulated software companies. The Long/Short debate should center on the orchestration layer vs application layer bifurcation. The Risk Manager should flag momentum unwind and forced selling dynamics."

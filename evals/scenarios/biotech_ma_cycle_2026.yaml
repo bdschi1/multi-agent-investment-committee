@@ -1,0 +1,115 @@
+# ===========================================================================
+# Biotech M&A Cycle — Target Identification (Early 2026)
+# ===========================================================================
+
+id: "biotech_ma_cycle_2026"
+title: "Biotech M&A Cycle — Target Identification"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "VKTX"
+as_of_date: "2026-02-01"
+as_of_context: >
+  Biotech M&A in 2025 reached $147bn across 77 deals (vs $84bn across 75
+  deals in 2024), with average deal value rising to $1.9bn from $1.1bn.
+  Top deals included JNJ/ITCI at $13.1bn, MRK/VRNA at $9.1bn, and
+  NVS/RNA at $9.0bn. Average target valuation at 4.6x EV/Y5 consensus
+  estimated sales (vs 4.2x in 2024; 5yr avg 4.8x). Average 30-day
+  acquisition premium was ~190% (vs ~170% in 2024). Approximately $230bn
+  cash estimated across top 20 acquirers to support 2026 deals.
+  Momentum driven by patent cliff offsets, management commentary
+  prioritizing BD, improving sentiment (NBI +31% vs S&P 500 +15% over
+  1 year), and increasing demand for innovation. By therapeutic area,
+  top 2025 targets were CNS, immunology, rare diseases, and metabolic.
+  OPCO potential 2026 candidates include VKTX (obesity/metabolic) and
+  MDGL (MASH). RPRX reported 4Q25 portfolio receipts of $874mn
+  (beat vs consensus $839mn) and guided 2026 at $3.275-3.425bn. 2025
+  was the strongest year for synthetic royalties, exceeding traditional
+  royalties for the first time. Pharma valuation discount to S&P 500
+  NTM P/E at -37%, near 2008 recession lows (~-40%) vs historical
+  average of -2%.
+
+tags:
+  - healthcare
+  - biotech
+  - m_and_a
+  - special_situations
+  - event_driven
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 7.0]
+  actual_outcome: >
+    Biotech M&A activity continued at an elevated pace into 2026. VKTX
+    remained a frequently cited takeout candidate given its obesity/
+    metabolic pipeline and the strategic imperative for large pharma to
+    diversify beyond traditional GLP-1 mechanisms. The sector's valuation
+    discount to the S&P 500 began to narrow as deal activity validated
+    pipeline values. Royalty Pharma continued to outperform XBI as its
+    capital deployment model benefited from elevated deal flow.
+  actual_return_pct: 15.0
+  must_find_facts:
+    - "2025 biotech M&A totaled $147 billion across 77 deals"
+    - "average deal value rose to $1.9 billion from $1.1 billion"
+    - "average acquisition premium approximately 190%"
+    - "approximately $230 billion cash available for 2026 acquisitions"
+    - "top therapeutic areas for targets include CNS immunology rare disease and metabolic"
+    - "pharma valuation discount to S&P 500 at negative 37%"
+    - "RPRX guided 2026 at $3.275 to $3.425 billion"
+  must_find_risks:
+    - "M&A premium compression if deal flow overwhelms buyer capacity"
+    - "regulatory risk for large deals under antitrust scrutiny"
+    - "pipeline risk inherent in pre-revenue biotech targets"
+    - "valuation multiples approaching 5-year averages may limit upside"
+    - "biotech capital markets reopening could reduce seller urgency"
+    - "sector discount could persist if macro environment deteriorates"
+  must_not_claim:
+    - "VKTX has received a takeover offer"
+    - "all biotech companies are M&A targets"
+    - "pharma valuations have returned to historical average"
+    - "M&A activity is declining"
+  expert_reasoning_sketch: >
+    Moderate conviction BUY on VKTX as an M&A-driven thesis within
+    the broader biotech takeout cycle. The setup is compelling: $230bn
+    in acquirer firepower, patent cliff urgency, management teams
+    publicly prioritizing BD, and a target valuation environment (4.6x
+    EV/Y5 sales) still below the 5-year average of 4.8x. VKTX fits
+    the profile — metabolic/obesity is a top therapeutic area for
+    acquirers, and the company's pipeline is differentiated from the
+    dominant GLP-1 mechanism. The 190% average acquisition premium
+    provides meaningful upside from current levels if a deal
+    materializes. However, this is fundamentally an event-driven
+    position with binary risk — the probability-weighted expected
+    return depends on takeout likelihood, which is inherently uncertain.
+    Position sizing should reflect this binary nature. The broader
+    pharma discount at -37% to S&P 500 (near 2008 lows vs -2%
+    historical average) suggests the sector is undervalued, but this
+    discount has persisted and may not close on M&A alone. The RPRX
+    model offers an alternative way to play the cycle with less binary
+    risk — its royalty receipts beat and 2026 guide suggest durable
+    cash flow growth regardless of any single deal outcome.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Ignores M&A cycle dynamics entirely"
+    - "Fails to mention acquirer firepower or patent cliff motivation"
+    - "Claims a specific deal will happen with certainty"
+    - "Misses the binary risk nature of M&A-driven positions"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-27"
+  notes: "Tests whether the committee can construct an event-driven M&A thesis with appropriate probability weighting and position sizing. The Long Analyst should build the takeout case. The Short Analyst should stress binary risk and the possibility that M&A activity slows. The Risk Manager should size the position for its event-driven nature. The Macro Strategist should contextualize within broader pharma sector valuation."

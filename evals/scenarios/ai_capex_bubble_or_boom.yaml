@@ -1,0 +1,111 @@
+# ===========================================================================
+# AI CapEx Cycle — Bubble or Durable Boom? (Late 2025)
+# ===========================================================================
+
+id: "ai_capex_bubble_or_boom"
+title: "AI CapEx Cycle — Bubble or Durable Boom?"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "MSFT"
+as_of_date: "2025-10-15"
+as_of_context: >
+  Hyperscaler AI capex consensus for 2026 rose from $467bn (+20% y/y) to
+  $533bn (+34% y/y) during 3Q earnings season. Recent capex growth was
+  76% y/y; bottom-up consensus expects deceleration to 25% by end of 2026,
+  but analysts underestimated capex in each of the past two years. GS
+  estimates up to $200bn upside to current 2026 estimates. Hyperscalers
+  collectively increased net debt by $295bn since 2021, but net debt/EBITDA
+  remains at just +0.2x, with capacity to add $700bn in net debt without
+  exceeding 1x leverage. ORCL planning $45-50bn financing in CY26 with
+  capex >$50bn vs ~$20bn in cash. GS concludes tech sector is "not in a
+  bubble — at least not yet" but notes growing risk factors: greater
+  reliance on debt finance, erosion of corporate sector financial surplus,
+  vendor financing emergence. Sequoia's David Cahn argues "the only way
+  to justify the large data center buildout forecasted by 2030 is AGI."
+  GS analysts compare current cycle to 1997/1998 tech boom rather than
+  1999/2000 — macro/market imbalances "not generally visible yet." The
+  AI infrastructure space is dominated by few incumbents with strong
+  balance sheets, unlike historical bubbles with fragmented competition.
+
+tags:
+  - technology
+  - AI
+  - capex_cycle
+  - bubble_risk
+  - mega_cap
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 7.0]
+  actual_outcome: >
+    AI capex continued to accelerate through Q4 2025 and into early 2026.
+    MSFT reported Azure AI revenue growth above expectations. However,
+    the software sector experienced a sharp 15% selloff in early Feb 2026
+    as Claude Cowork and OpenAI Frontier announcements raised questions
+    about value capture in the application layer. The infrastructure layer
+    (MSFT, ORCL, hyperscalers) proved more resilient than application-layer
+    software. The cycle remained in the boom phase, but the distribution
+    of returns narrowed to infrastructure providers.
+  actual_return_pct: 12.0
+  must_find_facts:
+    - "hyperscaler AI capex consensus approximately $533 billion for 2026"
+    - "capex growth rate approximately 76% year over year"
+    - "analysts underestimated capex in each of past two years"
+    - "hyperscaler net debt to EBITDA approximately 0.2x"
+    - "capacity to add approximately $700 billion in net debt"
+    - "GS comparison to 1997 or 1998 tech cycle rather than 1999 or 2000"
+  must_find_risks:
+    - "growing reliance on debt financing for AI capex"
+    - "vendor financing emergence as early bubble warning sign"
+    - "AI spending circularity with AI companies buying from each other"
+    - "valuation stretched but not yet at historical bubble levels"
+    - "deceleration risk if AI monetization disappoints"
+    - "only AGI justifies projected 2030 data center buildout"
+  must_not_claim:
+    - "we are currently in an AI bubble"
+    - "hyperscaler capex is declining"
+    - "AI capex has peaked"
+    - "the 1990s tech bubble has already repeated"
+  expert_reasoning_sketch: >
+    Moderate conviction BUY on MSFT as the best-positioned AI
+    infrastructure play. The capex cycle appears durable based on several
+    structural indicators: hyperscaler balance sheets remain underleveraged
+    at 0.2x net debt/EBITDA with $700bn in unused debt capacity, the space
+    is dominated by well-capitalized incumbents rather than speculative
+    entrants, and fundamental revenue growth is driving appreciation
+    rather than multiple expansion alone. The 1997/1998 analog is more
+    apt than 1999/2000 — macro imbalances have not yet emerged. However,
+    the position should be sized for the growing tail risks: vendor
+    financing is an early warning sign, spending circularity between AI
+    companies inflates apparent demand, and the gap between capex and
+    provable ROI continues to widen. The right framework is to own the
+    infrastructure picks-and-shovels layer while hedging application-layer
+    exposure, with explicit downside scenarios tied to capex deceleration
+    triggers. Options strategies may offer better risk/reward than outright
+    equity exposure given elevated implied volatility.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Definitively states we are in a bubble without nuance"
+    - "Ignores balance sheet capacity of hyperscalers"
+    - "Fails to mention capex deceleration risk"
+    - "Claims AI capex will grow indefinitely"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-27"
+  notes: "Tests whether the committee can navigate the bull/bear tension on AI capex sustainability. The Macro Strategist should draw 1990s parallels. The Risk Manager should flag vendor financing and circularity. The Long Analyst should emphasize balance sheet capacity and demand signals. The Short Analyst should stress the AGI justification gap and valuation concerns."

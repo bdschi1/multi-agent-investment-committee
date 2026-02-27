@@ -1,0 +1,117 @@
+# ===========================================================================
+# Fed Independence Under Threat — Institutional Risk Scenario (Jan 2026)
+# ===========================================================================
+
+id: "fed_independence_institutional_risk"
+title: "Fed Independence Under Threat — Institutional Risk Scenario"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "TLT"
+as_of_date: "2026-01-15"
+as_of_context: >
+  For the first time in history, the sitting Fed Chair is subject to a
+  criminal investigation by the DOJ. The probe, approved by US Attorney
+  Jeanine Pirro (a longtime presidential ally), centers on a $2.5 billion
+  Fed HQ renovation running ~$700 million over budget, alleging Powell
+  misled Congress about the project's scope. Powell released a rare
+  two-minute video statement: "The threat of criminal charges is a
+  consequence of the Federal Reserve setting interest rates based on our
+  best assessment of what will serve the public, rather than following the
+  preferences of the president." Twelve global central bankers signed a
+  solidarity statement including ECB's Lagarde, BoE's Bailey, and BoC's
+  Macklem. Every living former Fed chair and several former Treasury
+  secretaries signed a separate statement warning "this is how monetary
+  policy is made in emerging markets with weak institutions." Powell's
+  term as chair ends in May. Front-runners to replace him: Kevin Warsh
+  and Kevin Hassett. Sen. Thom Tillis (R-NC) said he would block any
+  nominee until the investigation is resolved. GS expects Warsh's views
+  on disinflationary AI productivity gains position him on the dovish
+  side of the FOMC debate. The administration also attempted to fire
+  Fed governor Lisa Cook, with her case reaching the Supreme Court.
+
+tags:
+  - macro
+  - rates
+  - institutional_risk
+  - central_bank
+  - geopolitics
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: -1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 8.0]
+  actual_outcome: >
+    The investigation created significant uncertainty in rates markets
+    through Q1 2026. Long-duration Treasuries initially sold off on
+    institutional credibility concerns before recovering as Senate
+    resistance to undermining Fed independence became clear. The
+    investigation did not lead to charges. Warsh was nominated as the
+    next Fed chair with a dovish-leaning posture. Term premium on
+    long-duration bonds remained elevated relative to pre-investigation
+    levels, reflecting a persistent institutional risk premium.
+  actual_return_pct: 4.0
+  must_find_facts:
+    - "first criminal investigation of a sitting Fed chair in history"
+    - "DOJ investigation approved by Jeanine Pirro"
+    - "renovation project approximately $2.5 billion and $700 million over budget"
+    - "12 global central bankers signed solidarity statement"
+    - "every living former Fed chair signed separate statement"
+    - "Powell's term ends in May"
+    - "Kevin Warsh is front-runner replacement"
+    - "Sen Tillis would block any nominee until investigation resolved"
+  must_find_risks:
+    - "erosion of central bank independence and credibility"
+    - "emerging market parallel for politicized monetary policy"
+    - "term premium expansion on institutional uncertainty"
+    - "transition risk during Fed leadership change"
+    - "precedent for future political pressure on monetary policy"
+    - "potential for rates volatility around nomination process"
+  must_not_claim:
+    - "Powell has been removed from office"
+    - "Powell has been charged with a crime"
+    - "the Fed has lost independence"
+    - "Warsh has already been confirmed"
+  expert_reasoning_sketch: >
+    BUY long-duration Treasuries (TLT) with moderate-to-high conviction
+    as a contrarian trade. The market's initial reaction — selling
+    duration on institutional credibility fears — likely overshoots the
+    fundamental impact. The investigation is structurally weak (a building
+    renovation cost overrun) and faces bipartisan Senate resistance.
+    The deeper signal is that the Fed's independence is being tested but
+    not broken — 12 global central bankers and every living former Fed
+    chair rallied to defend it, and key Republican senators publicly
+    opposed the approach. The Warsh succession likely represents
+    continuity with a slight dovish tilt given his views on AI
+    disinflation. The right trade is to buy the institutional risk
+    premium that the market has priced into long-duration bonds. The
+    risk is that this is the first step in a sustained institutional
+    degradation pattern — the emerging market parallel raised by former
+    central bankers is the tail risk that prevents higher conviction.
+    Position sizing should account for the non-zero probability that
+    Fed independence is permanently impaired.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 30
+  critical_failures:
+    - "Ignores institutional risk to central bank independence"
+    - "Fails to mention the unprecedented nature of the investigation"
+    - "Treats this as a routine political event"
+    - "Does not address the emerging market parallel"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-27"
+  notes: "Tests the Macro Strategist and Risk Manager agents on institutional/political risk pricing. This is a novel scenario with no direct historical precedent in the US — the system must reason about institutional credibility, term premium, and the difference between noise and structural regime change. The committee should debate whether this is transitory political theater or the beginning of EM-style institutional degradation."

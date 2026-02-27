@@ -1,0 +1,108 @@
+# ===========================================================================
+# GLP-1 Obesity Therapeutics — LLY vs NVO Competitive Dynamics (Mid-2025)
+# ===========================================================================
+
+id: "lly_nvo_obesity_therapeutics"
+title: "GLP-1 Obesity Therapeutics — LLY vs NVO Competitive Dynamics"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "LLY"
+as_of_date: "2025-06-15"
+as_of_context: >
+  The GLP-1 obesity market is projected at ~$95bn by 2030 (revised down from
+  $130bn by GS in Apr 2025). LLY holds 56.8% total incretin TRx share vs
+  NVO at 43.2%, with LLY's new-to-brand share at 63.8%. Zepbound NBRx share
+  is 71.6% vs Wegovy at 28.4%. NVO launched an oral Wegovy pill showing
+  strong early adoption driven by new users rather than injectable switchers.
+  LLY's orforglipron (oral GLP-1) expected in 2Q26. LLY's retatrutide
+  (triple-acting GGG agonist) showed 28.7% weight loss in Ph3 TRIUMPH-4
+  vs CagriSema's 22.7% in REDEFINE-1, but with higher discontinuation
+  rates (12-18% vs 4% placebo) and a dysesthesia signal at 8.8-20.9%.
+  Hims & Hers announced a compounded Wegovy pill at $49/month, sending
+  NVO shares down ~8%. Novo has filed >130 lawsuits against compounding
+  pharmacies. Medicare population unlock expected to expand the addressable
+  market. US market peak estimate lowered to $70bn (prev $95bn) while
+  ex-US raised to $50bn (prev $35bn).
+
+tags:
+  - healthcare
+  - pharma
+  - obesity
+  - competitive_dynamics
+  - tam_sizing
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 8.0]
+  actual_outcome: >
+    LLY continued to outpace NVO on market share through H2 2025.
+    Retatrutide's differentiated efficacy profile (28.7% weight loss)
+    positioned LLY as the innovation leader despite the safety signal.
+    The oral pill transition created a structural expansion of the
+    addressable population. Compounding remained a persistent but
+    contained headwind — branded pricing power held as the clinical
+    data gap between compounded and branded products widened.
+    TAM revisions stabilized around $95bn global by 2030.
+  actual_return_pct: 18.0
+  must_find_facts:
+    - "LLY holds approximately 57% total incretin TRx share"
+    - "new-to-brand share approximately 64% for LLY"
+    - "global GLP-1 obesity TAM estimated at approximately $95 billion by 2030"
+    - "retatrutide showed approximately 29% weight loss in Phase 3"
+    - "oral Wegovy pill showing strong early adoption"
+    - "compounded Wegovy pill announced at $49 per month"
+    - "NVO has filed over 130 lawsuits against compounding pharmacies"
+  must_find_risks:
+    - "retatrutide dysesthesia signal at higher doses"
+    - "compounding pharmacies eroding branded pricing power"
+    - "TAM estimates revised downward from previous forecasts"
+    - "higher discontinuation rates for retatrutide vs placebo"
+    - "oral pill transition may cannibalize injectable revenue"
+    - "Medicare coverage expansion adds volume but at lower reimbursement"
+  must_not_claim:
+    - "retatrutide has been approved by the FDA"
+    - "orforglipron has already launched"
+    - "compounding pharmacies have been shut down"
+    - "NVO has exited the obesity market"
+  expert_reasoning_sketch: >
+    Moderate-to-high conviction BUY on LLY. The competitive moat is
+    widening — LLY leads on TRx share, NBRx share, and pipeline
+    differentiation with retatrutide's best-in-class efficacy. The oral
+    transition is a structural positive for the entire category, expanding
+    the addressable population beyond injection-tolerant patients. The
+    compounding threat is real but likely contained — Novo's 130+ lawsuits,
+    SNAC IP protection, and the 73x higher API requirement for oral
+    compounding create meaningful barriers. The key debate is TAM
+    trajectory: the $95bn by 2030 estimate requires sustained penetration
+    growth, pricing stability, and Medicare uptake. The dysesthesia signal
+    on retatrutide warrants monitoring but affected a minority of patients
+    and correlated with lower baseline BMI. Position sizing should reflect
+    the binary risk of retatrutide label outcomes. At current valuations,
+    LLY is priced for category leadership — the risk is that NVO's oral
+    first-mover advantage and retatrutide safety concerns narrow the gap.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Fails to mention TAM sizing or market size estimates"
+    - "Ignores competitive dynamics between LLY and NVO"
+    - "Misses retatrutide safety signal"
+    - "Claims retatrutide is FDA approved"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-27"
+  notes: "Tests multi-agent debate on a complex competitive dynamics scenario in obesity therapeutics. Requires agents to weigh efficacy data, market share trends, TAM uncertainty, compounding threat, and pipeline safety signals. The Long vs Short debate should center on TAM sustainability and retatrutide risk/reward."

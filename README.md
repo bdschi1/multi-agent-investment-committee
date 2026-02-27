@@ -26,6 +26,8 @@ An AI system that replicates an institutional investment committee. You enter a 
 
 Under the hood, a quantitative pre-screen estimates financial distress risk and expected returns before the agents run. After the agents reach a conclusion, a portfolio optimizer converts their qualitative views into concrete portfolio weights. Every signal is stored for historical backtesting.
 
+This is a continually developed project. Features, interfaces, and test coverage expand over time as new research ideas and workflow needs arise.
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-687%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -680,17 +682,6 @@ python -m evals report                        # generate report from results/
 
 LLM providers: Anthropic, Google, OpenAI, HuggingFace, Ollama
 
-![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat&logo=langchain&logoColor=white)
-![Gradio](https://img.shields.io/badge/Gradio-F97316?style=flat&logo=gradio&logoColor=white)
-![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=flat&logo=pydantic&logoColor=white)
-![pypfopt](https://img.shields.io/badge/pypfopt-Black--Litterman-2C5F2D?style=flat)
-![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat&logo=anthropic&logoColor=white)
-![Google](https://img.shields.io/badge/Gemini-4285F4?style=flat&logo=google&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white)
-![Yahoo Finance](https://img.shields.io/badge/Yahoo_Finance-6001D2?style=flat&logo=yahoo&logoColor=white)
-![Bloomberg](https://img.shields.io/badge/Bloomberg-000000?style=flat&logo=bloomberg&logoColor=white)
-![Interactive Brokers](https://img.shields.io/badge/Interactive_Brokers-D71920?style=flat)
-
 ---
 
 <details>
@@ -729,6 +720,18 @@ This system draws on academic research in multi-agent financial AI, explainabili
 </details>
 
 ---
+
+## Contributing
+
+Contributions welcome. Areas for improvement:
+- Additional agent roles and analytical perspectives
+- New optimizer strategies and portfolio construction methods
+- Extended eval scenarios and ground truth cases
+- Enhanced vol intelligence and signal analytics
+
+## Status
+
+This project is under active, ongoing development. Core pipeline, agent architecture, optimizer, and XAI module are stable. New agent capabilities, optimization strategies, and evaluation scenarios are added as research needs evolve.
 
 ## License
 

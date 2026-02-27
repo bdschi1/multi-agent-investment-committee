@@ -5,6 +5,7 @@ from datetime import datetime
 
 from app_lib.model_factory import PROVIDER_DISPLAY
 from config.settings import LLMProvider, settings
+from optimizer.strategies import STRATEGY_DISPLAY_NAMES
 from orchestrator.committee import CommitteeResult
 from orchestrator.reasoning_trace import TraceRenderer
 
@@ -188,33 +189,44 @@ def _build_session_section() -> str:
 
 
 def _format_optimizer_section(optimization_result, memo=None) -> str:
-    """Format the Black-Litterman optimizer output as markdown tables."""
+    """Format portfolio optimizer output as markdown tables."""
     if not optimization_result or not getattr(optimization_result, 'success', False):
         error_msg = getattr(optimization_result, 'error_message', '') if optimization_result else ''
         if error_msg:
             return (
-                "\n## Computed Portfolio Analytics (Black-Litterman)\n\n"
+                "\n## Computed Portfolio Analytics\n\n"
                 f"*Optimizer did not produce results: {error_msg}*\n"
             )
         return ""
 
     opt = optimization_result
+    method = getattr(opt, 'optimizer_method', 'black_litterman')
+    display_name = getattr(opt, 'optimizer_display_name', 'Black-Litterman')
+    is_bl = method == "black_litterman"
+
     lines = [
         "",
-        "## Computed Portfolio Analytics (Black-Litterman)",
-        "",
-        "*Actual computed values from pypfopt Black-Litterman model — "
-        "compare with LLM heuristics above.*",
+        f"## Computed Portfolio Analytics ({display_name})",
         "",
     ]
 
-    # Side-by-side comparison table (heuristic vs computed)
-    if memo:
+    if is_bl:
+        lines.append(
+            "*Actual computed values from pypfopt Black-Litterman model — "
+            "compare with LLM heuristics above.*"
+        )
+    else:
+        lines.append(
+            f"*Computed portfolio weights and risk metrics using {display_name}.*"
+        )
+    lines.append("")
+
+    # Side-by-side comparison table (BL only — compares heuristic vs BL posterior)
+    if is_bl and memo and opt.bl_expected_return is not None:
         idio_ret_h = getattr(memo, 'idio_return_estimate', '') or '—'
         sharpe_h = getattr(memo, 'sharpe_estimate', '') or '—'
         sortino_h = getattr(memo, 'sortino_estimate', '') or '—'
 
-        # Extract numeric portion from heuristic strings for delta
         def _extract_pct(s):
             import re
             m = re.search(r'([+-]?\d+(?:\.\d+)?)\s*%', str(s))
@@ -259,24 +271,41 @@ def _format_optimizer_section(optimization_result, memo=None) -> str:
             "",
         ])
 
-    # BL model output
-    lines.extend([
-        "### Black-Litterman Model Output",
-        "",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| **Optimal Weight ({opt.ticker})** | {opt.optimal_weight_pct} |",
-        f"| **BL Expected Return** | {opt.bl_expected_return * 100:.2f}% |",
-        f"| **Equilibrium Return (Prior)** | {opt.equilibrium_return * 100:.2f}% |",
-        f"| **Portfolio Vol** | {opt.portfolio_vol * 100:.2f}% |",
-        f"| **Covariance Method** | {opt.covariance_method} |",
-        f"| **Lookback** | {opt.lookback_days} trading days |",
-        f"| **Risk Aversion (delta)** | {opt.risk_aversion} |",
-        f"| **Tau** | {opt.tau} |",
-        "",
-    ])
+    # Model output table — strategy-specific
+    if is_bl and opt.bl_expected_return is not None:
+        lines.extend([
+            "### Black-Litterman Model Output",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| **Optimal Weight ({opt.ticker})** | {opt.optimal_weight_pct} |",
+            f"| **BL Expected Return** | {opt.bl_expected_return * 100:.2f}% |",
+            f"| **Equilibrium Return (Prior)** | {opt.equilibrium_return * 100:.2f}% |",
+            f"| **Portfolio Vol** | {opt.portfolio_vol * 100:.2f}% |",
+            f"| **Covariance Method** | {opt.covariance_method} |",
+            f"| **Lookback** | {opt.lookback_days} trading days |",
+            f"| **Risk Aversion (delta)** | {opt.risk_aversion} |",
+            f"| **Tau** | {opt.tau} |",
+            "",
+        ])
+    else:
+        lines.extend([
+            f"### {display_name} Output",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| **Optimal Weight ({opt.ticker})** | {opt.optimal_weight_pct} |",
+            f"| **Sharpe (computed)** | {opt.computed_sharpe:.2f} |",
+            f"| **Sortino (computed)** | {opt.computed_sortino:.2f} |",
+            f"| **Portfolio Vol** | {opt.portfolio_vol * 100:.2f}% |",
+            f"| **Annualized Vol** | {opt.annualized_vol * 100:.2f}% |",
+            f"| **Downside Vol** | {opt.downside_vol * 100:.2f}% |",
+            f"| **Covariance Method** | {opt.covariance_method} |",
+            f"| **Lookback** | {opt.lookback_days} trading days |",
+            "",
+        ])
 
-    # Factor exposures
+    # Factor exposures (all strategies)
     if opt.factor_exposures:
         lines.extend([
             "### Computed Factor Exposures (OLS Regression)",
@@ -292,7 +321,7 @@ def _format_optimizer_section(optimization_result, memo=None) -> str:
             )
         lines.append("")
 
-    # Risk contribution (MCTR) — top 5
+    # Risk contribution (MCTR) — top 5 (all strategies)
     if opt.risk_contributions:
         lines.extend([
             "### Risk Contribution (MCTR) — Top 5",
@@ -307,10 +336,10 @@ def _format_optimizer_section(optimization_result, memo=None) -> str:
             )
         lines.append("")
 
-    # Universe weights (non-zero)
+    # Universe weights (non-zero, all strategies)
     if opt.universe_weights:
         lines.extend([
-            "### BL Optimal Universe Weights",
+            f"### Optimal Universe Weights ({display_name})",
             "",
             "| Ticker | Weight |",
             "|--------|--------|",
@@ -318,6 +347,147 @@ def _format_optimizer_section(optimization_result, memo=None) -> str:
         for t, w in sorted(opt.universe_weights.items(), key=lambda x: -x[1]):
             lines.append(f"| {t} | {w:.1%} |")
         lines.append("")
+
+    return "\n".join(lines)
+
+
+def _format_ensemble_section(ensemble_result) -> str:
+    """Format ensemble optimizer output as markdown tables."""
+    if not ensemble_result or not getattr(ensemble_result, 'success', False):
+        error_msg = getattr(ensemble_result, 'error_message', '') if ensemble_result else ''
+        if error_msg:
+            return (
+                "\n## Ensemble Portfolio Analytics\n\n"
+                f"*Ensemble optimizer did not produce results: {error_msg}*\n"
+            )
+        return ""
+
+    ens = ensemble_result
+    blend_desc = ", ".join(
+        f"{STRATEGY_DISPLAY_NAMES.get(k, k)} {v:.0%}"
+        for k, v in ens.ensemble_weights_used.items()
+        if v > 0
+    )
+
+    lines = [
+        "",
+        "## Ensemble Portfolio Analytics (All Strategies)",
+        "",
+        f"*Runs all strategies on shared universe and covariance matrix. "
+        f"Blend: {blend_desc}.*",
+        "",
+    ]
+
+    # Strategy comparison table
+    if ens.strategy_comparisons:
+        lines.extend([
+            "### Strategy Comparison",
+            "",
+            "| Strategy | Role | Target Wt | Port Vol | Sharpe | Sortino | Max Wt | HHI |",
+            "|----------|------|-----------|----------|--------|---------|--------|-----|",
+        ])
+        for sc in ens.strategy_comparisons:
+            lines.append(
+                f"| **{sc.strategy_name}** | {sc.role} | "
+                f"{sc.target_weight:.1%} | {sc.portfolio_vol * 100:.1f}% | "
+                f"{sc.sharpe:.2f} | {sc.sortino:.2f} | "
+                f"{sc.max_single_weight:.1%} | {sc.hhi:.3f} |"
+            )
+        lines.append("")
+
+    # Blended allocation
+    lines.extend([
+        "### Blended Allocation",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| **Blended Target Weight ({ens.ticker})** | {ens.blended_target_weight:.1%} |",
+        f"| **Blended Portfolio Vol** | {ens.blended_portfolio_vol * 100:.1f}% |",
+        f"| **Blended Sharpe** | {ens.blended_sharpe:.2f} |",
+        f"| **Blended Sortino** | {ens.blended_sortino:.2f} |",
+        f"| **Blended HHI** | {ens.blended_hhi:.3f} |",
+        "",
+    ])
+
+    # Weight consensus matrix
+    if ens.consensus:
+        # Build header from available strategy keys
+        strat_keys = []
+        strat_short = {
+            "black_litterman": "BL",
+            "hrp": "HRP",
+            "mean_variance": "MV",
+            "min_variance": "MinVar",
+            "risk_parity": "RP",
+            "equal_weight": "EW",
+        }
+        for tc in ens.consensus:
+            for k in tc.weights_by_strategy:
+                if k not in strat_keys:
+                    strat_keys.append(k)
+
+        header_names = [strat_short.get(k, k) for k in strat_keys]
+        header = "| Ticker | " + " | ".join(header_names) + " | Mean | Std |"
+        sep = "|--------" + "|------" * len(strat_keys) + "|------|-----|"
+
+        lines.extend([
+            "### Weight Consensus Matrix",
+            "",
+            header,
+            sep,
+        ])
+        for tc in ens.consensus:
+            wt_cells = " | ".join(
+                f"{tc.weights_by_strategy.get(k, 0.0):.1%}" for k in strat_keys
+            )
+            marker = " *" if tc.is_target else ""
+            lines.append(
+                f"| **{tc.ticker}**{marker} | {wt_cells} | "
+                f"{tc.mean_weight:.1%} | {tc.std_weight * 100:.1f}pp |"
+            )
+        lines.append("")
+
+    # Divergence flags
+    if ens.divergence_flags:
+        lines.extend(["### Divergence Flags", ""])
+        for df in ens.divergence_flags:
+            icon = "+" if df.flag_type == "high_agreement" else "!"
+            lines.append(f"- **[{icon}] {df.ticker}:** {df.description}")
+        lines.append("")
+
+    # Layered interpretation
+    if ens.layered_narrative:
+        lines.extend([
+            "### Layered Interpretation",
+            "",
+            ens.layered_narrative,
+            "",
+        ])
+
+    # Blended MCTR — top 5
+    if ens.blended_risk_contributions:
+        lines.extend([
+            "### Blended Risk Contribution (MCTR) — Top 5",
+            "",
+            "| Ticker | Weight | Marginal CTR | % of Portfolio Risk |",
+            "|--------|--------|-------------|---------------------|",
+        ])
+        for rc in ens.blended_risk_contributions[:5]:
+            lines.append(
+                f"| **{rc.ticker}** | {rc.weight:.1%} | {rc.marginal_ctr:.4f} | "
+                f"{rc.pct_contribution:.1%} |"
+            )
+        lines.append("")
+
+    # Failed strategies
+    if ens.failed_strategies:
+        lines.extend([
+            "### Failed Strategies",
+            "",
+            f"*The following strategies did not produce results: "
+            f"{', '.join(ens.failed_strategies)}.*",
+            "",
+        ])
 
     return "\n".join(lines)
 
@@ -640,10 +810,14 @@ def _format_committee_memo(result: CommitteeResult, provider_name: str = "") -> 
         if vol_target_r:
             lines.extend(["", f"**Vol Target Rationale:** {vol_target_r}"])
 
-    # Black-Litterman optimizer output (computed, not heuristic)
+    # Optimizer output (computed, not heuristic)
     opt_result = getattr(result, 'optimization_result', None)
     if opt_result:
-        opt_section = _format_optimizer_section(opt_result, memo)
+        from optimizer.models import EnsembleResult
+        if isinstance(opt_result, EnsembleResult):
+            opt_section = _format_ensemble_section(opt_result)
+        else:
+            opt_section = _format_optimizer_section(opt_result, memo)
         if opt_section:
             lines.append(opt_section)
 

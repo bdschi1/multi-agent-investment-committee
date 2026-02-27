@@ -58,6 +58,7 @@ from app_lib.model_factory import (
     create_model,
 )
 from config.settings import LLMProvider, settings
+from optimizer.strategies import DISPLAY_TO_STRATEGY_KEY, STRATEGY_DISPLAY_NAMES
 from orchestrator.committee import CommitteeResult, InvestmentCommittee
 from orchestrator.conviction_chart import (
     build_conviction_probability,
@@ -141,6 +142,7 @@ def run_committee_analysis(
     debate_rounds: int,
     model_choice: str = "",
     uploaded_files: list | None = None,
+    optimizer_name: str = "Black-Litterman",
     progress: gr.Progress = gr.Progress(),
 ) -> tuple[str, str, str, str, str, str, str, str, str, str]:
     """
@@ -176,9 +178,13 @@ def run_committee_analysis(
     # Resolve model name — use explicit choice if provided, else provider default
     selected_model = model_choice.strip() if model_choice and model_choice.strip() else None
 
-    # Override debate rounds from UI
+    # Override debate rounds and optimizer method from UI
     original_rounds = settings.max_debate_rounds
     settings.max_debate_rounds = debate_rounds
+    original_optimizer = settings.optimizer_method
+    settings.optimizer_method = DISPLAY_TO_STRATEGY_KEY.get(
+        optimizer_name, "black_litterman"
+    )
 
     def on_status(msg: str):
         status_messages.append(msg)
@@ -294,8 +300,9 @@ def run_committee_analysis(
         )
         return error_msg, "", "", "", "", "", "", "", None, None, "", f"Error: {str(e)}", None, None, None
     finally:
-        # Restore original debate rounds
+        # Restore original settings
         settings.max_debate_rounds = original_rounds
+        settings.optimizer_method = original_optimizer
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +420,7 @@ def run_phase2_synthesis(
     pm_guidance: str,
     provider_name: str,
     model_choice: str = "",
+    optimizer_name: str = "Black-Litterman",
     progress: gr.Progress = gr.Progress(),
 ) -> tuple:
     """
@@ -429,6 +437,7 @@ def run_phase2_synthesis(
     status_messages = []
     provider = PROVIDER_DISPLAY.get(provider_name, settings.llm_provider)
     selected_model = model_choice.strip() if model_choice and model_choice.strip() else None
+    optimizer_key = DISPLAY_TO_STRATEGY_KEY.get(optimizer_name, "black_litterman")
 
     def on_status(msg: str):
         status_messages.append(msg)
@@ -449,6 +458,7 @@ def run_phase2_synthesis(
             model=model,
             pm_guidance=pm_guidance or "",
             on_status=on_status,
+            optimizer_method=optimizer_key,
         )
 
         ticker = result.ticker
@@ -653,7 +663,7 @@ def build_ui() -> gr.Blocks:
 </div>""",
         )
 
-        # ── Controls: all inputs + mode + button in two compact rows ──
+        # ── Controls: inputs row → run bar → guidance row ──
         with gr.Group(elem_classes=["controls-group"]):
             with gr.Row(equal_height=True):
                 ticker_input = gr.Textbox(
@@ -661,21 +671,22 @@ def build_ui() -> gr.Blocks:
                     placeholder="e.g. NVDA",
                     max_lines=1,
                     scale=1,
+                    min_width=80,
                 )
                 provider_dropdown = gr.Dropdown(
                     choices=list(PROVIDER_DISPLAY.keys()),
                     value=default_display,
-                    label="Provider",
+                    label="Provider \u25BC",
                     interactive=True,
-                    scale=1,
+                    scale=2,
                 )
                 model_dropdown = gr.Dropdown(
                     choices=PROVIDER_MODEL_CHOICES.get(default_display, []),
                     value=_get_default_model_for_provider(default_display),
-                    label="Model",
+                    label="Model \u25BC",
                     interactive=True,
                     allow_custom_value=True,
-                    scale=1,
+                    scale=2,
                 )
                 debate_rounds_input = gr.Slider(
                     minimum=1,
@@ -691,21 +702,26 @@ def build_ui() -> gr.Blocks:
                     label="Mode",
                     scale=1,
                 )
-                with gr.Column(scale=1, min_width=140):
-                    run_btn = gr.Button(
-                        "Run",
-                        variant="primary",
-                        size="sm",
-                        visible=not settings.enable_hitl,
-                        elem_classes=["start-btn"],
-                    )
-                    phase1_btn = gr.Button(
-                        "Run",
-                        variant="primary",
-                        size="sm",
-                        visible=settings.enable_hitl,
-                        elem_classes=["start-btn"],
-                    )
+                optimizer_dropdown = gr.Dropdown(
+                    choices=list(STRATEGY_DISPLAY_NAMES.values()),
+                    value="Black-Litterman",
+                    label="Optimizer \u25BC",
+                    interactive=True,
+                    scale=2,
+                )
+            with gr.Row(equal_height=True):
+                run_btn = gr.Button(
+                    "Run Committee Analysis",
+                    variant="primary",
+                    visible=not settings.enable_hitl,
+                    elem_classes=["run-bar"],
+                )
+                phase1_btn = gr.Button(
+                    "Run Committee Analysis",
+                    variant="primary",
+                    visible=settings.enable_hitl,
+                    elem_classes=["run-bar"],
+                )
             with gr.Row(equal_height=True):
                 context_input = gr.Textbox(
                     label="Expert Guidance — steers all analysts (optional)",
@@ -753,7 +769,7 @@ def build_ui() -> gr.Blocks:
                     variant="primary",
                     size="sm",
                     scale=1,
-                    elem_classes=["start-btn"],
+                    elem_classes=["run-bar"],
                 )
 
         # Hidden states
@@ -862,12 +878,13 @@ def build_ui() -> gr.Blocks:
         # ── Lock inputs during execution ──
         _lockable = [ticker_input, context_input, provider_dropdown,
                      model_dropdown, debate_rounds_input, mode_selector,
+                     optimizer_dropdown,
                      file_upload, pm_guidance_input,
                      qa_textbox, qa_send_btn,
                      run_btn, phase1_btn, phase2_btn]
 
         def _lock_inputs():
-            updates = [gr.update(interactive=False) for _ in range(10)]  # input fields + chat
+            updates = [gr.update(interactive=False) for _ in range(11)]  # input fields + chat
             updates.extend([
                 gr.update(interactive=False, value="..."),  # run_btn
                 gr.update(interactive=False, value="..."),  # phase1_btn
@@ -876,11 +893,11 @@ def build_ui() -> gr.Blocks:
             return updates
 
         def _unlock_inputs():
-            updates = [gr.update(interactive=True) for _ in range(10)]  # input fields + chat
+            updates = [gr.update(interactive=True) for _ in range(11)]  # input fields + chat
             updates.extend([
-                gr.update(interactive=True, value="Run"),   # run_btn
-                gr.update(interactive=True, value="Run"),   # phase1_btn
-                gr.update(interactive=True, value="Go"),    # phase2_btn
+                gr.update(interactive=True, value="Run Committee Analysis"),  # run_btn
+                gr.update(interactive=True, value="Run Committee Analysis"),  # phase1_btn
+                gr.update(interactive=True, value="Go"),                      # phase2_btn
             ])
             return updates
 
@@ -896,7 +913,7 @@ def build_ui() -> gr.Blocks:
         ).then(
             fn=run_committee_analysis,
             inputs=[ticker_input, context_input, provider_dropdown, debate_rounds_input,
-                    model_dropdown, file_upload],
+                    model_dropdown, file_upload, optimizer_dropdown],
             outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
@@ -960,10 +977,11 @@ def build_ui() -> gr.Blocks:
 
         # ── HITL Phase 2 ──
         def handle_phase2(inter_state, pm_guidance, provider_name, model_choice,
-                          progress=gr.Progress()):
+                          optimizer_name, progress=gr.Progress()):
             results = run_phase2_synthesis(
                 inter_state, pm_guidance, provider_name,
-                model_choice=model_choice, progress=progress,
+                model_choice=model_choice, optimizer_name=optimizer_name,
+                progress=progress,
             )
             return results + (gr.update(visible=False),)
 
@@ -977,7 +995,8 @@ def build_ui() -> gr.Blocks:
             outputs=[progress_status],
         ).then(
             fn=handle_phase2,
-            inputs=[intermediate_state, pm_guidance_input, provider_dropdown, model_dropdown],
+            inputs=[intermediate_state, pm_guidance_input, provider_dropdown, model_dropdown,
+                    optimizer_dropdown],
             outputs=[memo_output, bull_output, short_output, bear_output, macro_output, xai_output,
                      debate_output, conviction_output, conviction_trajectory_plot,
                      conviction_probability_plot, trace_output, status_output,
@@ -1090,6 +1109,21 @@ if __name__ == "__main__":
         .progress-bar { min-height: 0 !important; }
         .progress-bar .wrap, .progress-bar.wrap { min-height: 0 !important; max-height: 3rem !important; }
         .progress-text { font-size: 0.85rem !important; padding: 4px 8px !important; }
+        .run-bar button {
+            width: 100% !important;
+            padding: 8px 0 !important;
+            font-size: 0.82rem !important; font-weight: 700 !important;
+            letter-spacing: 0.03em !important;
+            background: #2ecc71 !important; background-color: #2ecc71 !important;
+            border: 1px solid #27ae60 !important; color: #fff !important;
+            border-radius: 5px !important;
+            box-shadow: 0 2px 6px rgba(46,204,113,0.3) !important;
+            cursor: pointer !important;
+        }
+        .run-bar button:hover {
+            background: #27ae60 !important; background-color: #27ae60 !important;
+            box-shadow: 0 3px 10px rgba(46,204,113,0.45) !important;
+        }
         """,
         js="""
         () => {
@@ -1098,12 +1132,12 @@ if __name__ == "__main__":
                 const cg = document.querySelectorAll('.controls-group');
                 cg.forEach(group => {
                     group.querySelectorAll('input, button, select, textarea, span, label, li, div, option, a').forEach(el => {
-                        // Skip start-btn children — they get separate styling
-                        if (el.closest('.start-btn')) return;
+                        // Skip run-bar children — they get separate styling
+                        if (el.closest('.run-bar')) return;
                         el.style.setProperty('font-size', '0.72rem', 'important');
                     });
                     group.querySelectorAll('input, select, textarea').forEach(el => {
-                        if (el.closest('.start-btn')) return;
+                        if (el.closest('.run-bar')) return;
                         el.style.setProperty('padding', '4px 6px', 'important');
                         el.style.setProperty('overflow', 'hidden', 'important');
                         el.style.setProperty('text-overflow', 'ellipsis', 'important');
@@ -1111,25 +1145,19 @@ if __name__ == "__main__":
                     });
                 });
 
-                // Green circle run buttons
-                document.querySelectorAll('.start-btn button').forEach(btn => {
-                    btn.style.setProperty('border-radius', '50%', 'important');
-                    btn.style.setProperty('width', '2.8rem', 'important');
-                    btn.style.setProperty('height', '2.8rem', 'important');
-                    btn.style.setProperty('min-width', '2.8rem', 'important');
-                    btn.style.setProperty('max-width', '2.8rem', 'important');
-                    btn.style.setProperty('min-height', '2.8rem', 'important');
-                    btn.style.setProperty('max-height', '2.8rem', 'important');
-                    btn.style.setProperty('padding', '0', 'important');
-                    btn.style.setProperty('font-size', '0.6rem', 'important');
+                // Green run bar (reinforces CSS)
+                document.querySelectorAll('.run-bar button').forEach(btn => {
+                    btn.style.setProperty('width', '100%', 'important');
+                    btn.style.setProperty('padding', '8px 0', 'important');
+                    btn.style.setProperty('font-size', '0.82rem', 'important');
                     btn.style.setProperty('font-weight', '700', 'important');
-                    btn.style.setProperty('line-height', '1', 'important');
-                    btn.style.setProperty('text-align', 'center', 'important');
+                    btn.style.setProperty('letter-spacing', '0.03em', 'important');
                     btn.style.setProperty('background', '#2ecc71', 'important');
                     btn.style.setProperty('background-color', '#2ecc71', 'important');
-                    btn.style.setProperty('border', '2px solid #27ae60', 'important');
+                    btn.style.setProperty('border', '1px solid #27ae60', 'important');
                     btn.style.setProperty('color', '#fff', 'important');
-                    btn.style.setProperty('box-shadow', '0 2px 8px rgba(46,204,113,0.3)', 'important');
+                    btn.style.setProperty('border-radius', '5px', 'important');
+                    btn.style.setProperty('box-shadow', '0 2px 6px rgba(46,204,113,0.3)', 'important');
                 });
             }
 

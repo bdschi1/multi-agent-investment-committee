@@ -1,8 +1,13 @@
 """
-Main Black-Litterman optimization pipeline.
+Portfolio optimization pipeline.
 
-Takes IC output (PM conviction, bull/bear cases) and computes actual
-portfolio weights, risk metrics, and factor exposures using pypfopt.
+Shared infrastructure (universe, covariance, analytics) with pluggable
+optimization strategies. Default: Black-Litterman.
+
+run_optimization() is the main entry point — dispatches to the selected
+strategy and computes shared analytics.
+
+run_black_litterman() is a backward-compatible wrapper.
 """
 
 from __future__ import annotations
@@ -15,14 +20,14 @@ from optimizer.analytics import compute_factor_betas, compute_mctr, compute_risk
 from optimizer.covariance import compute_covariance
 from optimizer.models import OptimizationResult, OptimizerFallback
 from optimizer.universe import SECTOR_ETF_MAP, build_universe
-from optimizer.views import build_views
 
 logger = logging.getLogger(__name__)
 
 
-def run_black_litterman(
+def run_optimization(
     ticker: str,
     sector: str,
+    optimizer_method: str = "black_litterman",
     bull_case=None,
     bear_case=None,
     macro_view=None,
@@ -35,78 +40,49 @@ def run_black_litterman(
     cov_method: str = "ledoit_wolf",
 ) -> OptimizationResult | OptimizerFallback:
     """
-    Run the full Black-Litterman optimization pipeline.
+    Run portfolio optimization with the selected strategy.
 
-    Pipeline:
+    Shared pipeline:
         1. Build universe (target + peers + sector ETF + SPY)
         2. Compute shrunk covariance matrix
-        3. Derive market-cap equilibrium prior
-        4. Extract views from IC output
-        5. Run BL model → posterior returns
-        6. Max-Sharpe optimization → optimal weights
-        7. Compute analytics (Sharpe, Sortino, factor betas, MCTR)
+        3. Dispatch to selected strategy
+        4. Compute analytics (Sharpe, Sortino, factor betas, MCTR)
 
     Returns:
         OptimizationResult on success, OptimizerFallback on any failure.
     """
+    from optimizer.strategies import STRATEGY_DISPLAY_NAMES, get_strategy
+
     try:
-        # 1. Build universe
+        # 1. Build universe (shared)
         universe, prices, market_caps = build_universe(
             ticker, sector, max_peers=max_peers, lookback=lookback
         )
 
-        # 2. Covariance estimation
+        # 2. Covariance estimation (shared)
         cov_matrix = compute_covariance(prices, method=cov_method)
 
-        # 3. Market-cap weights for equilibrium prior
-        total_mcap = sum(market_caps.get(t, 1e10) for t in universe)
-        w_mkt = np.array([market_caps.get(t, 1e10) / total_mcap for t in universe])
+        # 3. Dispatch to strategy
+        strategy = get_strategy(optimizer_method)
 
-        # 4. Build views from IC output
-        P, Q, confidence_scale = build_views(
+        strategy_result = strategy.optimize(
+            universe=universe,
+            prices=prices,
+            cov_matrix=cov_matrix,
+            market_caps=market_caps,
             ticker=ticker,
+            risk_free_rate=risk_free_rate,
             bull_case=bull_case,
             bear_case=bear_case,
             macro_view=macro_view,
-            memo=committee_memo,
-            universe_tickers=universe,
-        )
-
-        # 5. Run pypfopt Black-Litterman model
-        from pypfopt import BlackLittermanModel, EfficientFrontier
-        from pypfopt.black_litterman import market_implied_prior_returns
-
-        # Equilibrium returns (pi = delta * Sigma * w_mkt)
-        bl = BlackLittermanModel(
-            cov_matrix,
-            pi="market",
-            market_caps=market_caps,
+            committee_memo=committee_memo,
             risk_aversion=risk_aversion,
-            Q=Q,
-            P=P,
             tau=tau,
         )
 
-        # Adjust omega based on confidence
-        # omega = P @ (tau * Sigma) @ P.T / confidence_scale
-        sigma_arr = cov_matrix.values if hasattr(cov_matrix, 'values') else np.array(cov_matrix)
-        omega_raw = P @ (tau * sigma_arr) @ P.T
-        omega = omega_raw / confidence_scale
-        bl.omega = omega
-
-        # Posterior returns
-        bl_returns = bl.bl_returns()
-        bl_cov = bl.bl_cov()
-
-        # Equilibrium returns for comparison
-        eq_returns = market_implied_prior_returns(
-            market_caps, risk_aversion, cov_matrix
-        )
-
-        # 6. Max-Sharpe optimization
-        ef = EfficientFrontier(bl_returns, bl_cov)
-        ef.max_sharpe(risk_free_rate=risk_free_rate)
-        cleaned_weights = ef.clean_weights()
+        cleaned_weights = strategy_result["weights"]
+        strategy_metadata = strategy_result.get("metadata", {})
+        strategy_expected_returns = strategy_result.get("expected_returns")
 
         # Extract target weight
         target_weight = cleaned_weights.get(ticker, 0.0)
@@ -114,17 +90,18 @@ def run_black_litterman(
         # Get all weights as array (aligned with universe order)
         weight_arr = np.array([cleaned_weights.get(t, 0.0) for t in universe])
 
-        # 7. Analytics
-        # Daily returns for the target stock
+        # 4. Analytics (shared across all strategies)
         daily_returns = prices[ticker].pct_change().dropna()
 
-        # BL posterior expected return for target
-        bl_ret_target = float(bl_returns[ticker]) if ticker in bl_returns.index else float(Q[0])
-        eq_ret_target = float(eq_returns[ticker]) if ticker in eq_returns.index else 0.0
+        # Expected return for Sharpe/Sortino computation
+        if strategy_expected_returns and ticker in strategy_expected_returns:
+            exp_ret_target = strategy_expected_returns[ticker]
+        else:
+            exp_ret_target = float(daily_returns.mean() * 252)
 
         # Risk ratios
         sharpe, sortino, ann_vol, down_vol = compute_risk_ratios(
-            daily_returns, bl_ret_target, rf=risk_free_rate
+            daily_returns, exp_ret_target, rf=risk_free_rate
         )
 
         # Factor betas: regress target on SPY + sector ETF
@@ -148,13 +125,18 @@ def run_black_litterman(
         port_var = float(weight_arr.T @ cov_arr @ weight_arr)
         port_vol = float(np.sqrt(max(port_var, 1e-16)))
 
+        display_name = STRATEGY_DISPLAY_NAMES.get(optimizer_method, optimizer_method)
+
         result = OptimizationResult(
             success=True,
             ticker=ticker,
+            optimizer_method=optimizer_method,
+            optimizer_display_name=display_name,
             optimal_weight=round(target_weight, 6),
             optimal_weight_pct=f"{target_weight * 100:.1f}%",
-            bl_expected_return=round(bl_ret_target, 4),
-            equilibrium_return=round(eq_ret_target, 4),
+            bl_expected_return=strategy_metadata.get("bl_expected_return"),
+            equilibrium_return=strategy_metadata.get("equilibrium_return"),
+            expected_return=round(exp_ret_target, 4),
             computed_sharpe=round(sharpe, 2),
             computed_sortino=round(sortino, 2),
             annualized_vol=round(ann_vol, 4),
@@ -167,21 +149,56 @@ def run_black_litterman(
             covariance_method=cov_method,
             lookback_days=len(prices),
             risk_free_rate=risk_free_rate,
-            tau=tau,
-            risk_aversion=risk_aversion,
+            tau=tau if optimizer_method == "black_litterman" else 0.0,
+            risk_aversion=risk_aversion if optimizer_method == "black_litterman" else 0.0,
         )
 
         logger.info(
-            f"BL optimizer: {ticker} weight={target_weight:.1%}, "
-            f"BL return={bl_ret_target:.2%}, Sharpe={sharpe:.2f}"
+            f"{display_name} optimizer: {ticker} weight={target_weight:.1%}, "
+            f"Sharpe={sharpe:.2f}"
         )
 
         return result
 
     except Exception as e:
-        logger.error(f"Black-Litterman optimizer failed for {ticker}: {e}", exc_info=True)
+        logger.error(
+            f"Optimizer ({optimizer_method}) failed for {ticker}: {e}",
+            exc_info=True,
+        )
         return OptimizerFallback(
             success=False,
             error_message=f"Optimizer failed: {str(e)}",
             ticker=ticker,
         )
+
+
+def run_black_litterman(
+    ticker: str,
+    sector: str,
+    bull_case=None,
+    bear_case=None,
+    macro_view=None,
+    committee_memo=None,
+    risk_free_rate: float = 0.05,
+    risk_aversion: float = 2.5,
+    tau: float = 0.05,
+    max_peers: int = 5,
+    lookback: str = "2y",
+    cov_method: str = "ledoit_wolf",
+) -> OptimizationResult | OptimizerFallback:
+    """Backward-compatible wrapper: delegates to run_optimization with method='black_litterman'."""
+    return run_optimization(
+        ticker=ticker,
+        sector=sector,
+        optimizer_method="black_litterman",
+        bull_case=bull_case,
+        bear_case=bear_case,
+        macro_view=macro_view,
+        committee_memo=committee_memo,
+        risk_free_rate=risk_free_rate,
+        risk_aversion=risk_aversion,
+        tau=tau,
+        max_peers=max_peers,
+        lookback=lookback,
+        cov_method=cov_method,
+    )

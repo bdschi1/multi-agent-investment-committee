@@ -139,6 +139,15 @@ class Settings(BaseSettings):
         description="Enable two-phase human-in-the-loop mode in UI (review before PM synthesis)",
     )
 
+    # --- Optimizer ---
+    optimizer_method: str = Field(
+        default="black_litterman",
+        description=(
+            "Portfolio optimization strategy: black_litterman, hrp, mean_variance, "
+            "min_variance, risk_parity, equal_weight, ensemble"
+        ),
+    )
+
     # --- XAI Module ---
     enable_xai: bool = Field(default=True, description="Enable XAI pre-screen analysis in pipeline")
     xai_distress_threshold: float = Field(

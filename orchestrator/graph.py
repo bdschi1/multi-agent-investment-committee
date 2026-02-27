@@ -271,6 +271,7 @@ def _build_config(
     on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
     model_cache: dict[str, Any] | None = None,
+    optimizer_method: str | None = None,
 ) -> dict:
     """Build a LangGraph config dict with configurable non-serializable objects."""
     configurable: dict[str, Any] = {}
@@ -282,6 +283,8 @@ def _build_config(
         configurable["tool_registry"] = tool_registry
     if model_cache:
         configurable["model_cache"] = model_cache
+    if optimizer_method is not None:
+        configurable["optimizer_method"] = optimizer_method
     return {"configurable": configurable} if configurable else {}
 
 
@@ -316,6 +319,7 @@ def run_graph(
     max_debate_rounds: int = 2,
     on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
+    optimizer_method: str | None = None,
 ) -> CommitteeResult:
     """
     High-level entry point: invoke the compiled graph and return CommitteeResult.
@@ -348,10 +352,19 @@ def run_graph(
     except Exception:
         pass  # Graceful: no overrides if import fails (e.g., in tests)
 
+    # Resolve optimizer method from settings if not provided
+    if optimizer_method is None:
+        try:
+            from config.settings import settings
+            optimizer_method = settings.optimizer_method
+        except Exception:
+            optimizer_method = "black_litterman"
+
     # Build config for non-serializable objects
     config = _build_config(
         model=model, on_status=on_status,
         tool_registry=tool_registry, model_cache=model_cache,
+        optimizer_method=optimizer_method,
     )
 
     initial_state: dict[str, Any] = {
@@ -455,6 +468,7 @@ def run_graph_phase2(
     pm_guidance: str = "",
     on_status: Callable[[str], None] | None = None,
     tool_registry: Any = None,
+    optimizer_method: str | None = None,
 ) -> CommitteeResult:
     """
     Run Phase 2 of the HITL two-phase execution.
@@ -484,9 +498,18 @@ def run_graph_phase2(
     except Exception:
         pass
 
+    # Resolve optimizer method from settings if not provided
+    if optimizer_method is None:
+        try:
+            from config.settings import settings
+            optimizer_method = settings.optimizer_method
+        except Exception:
+            optimizer_method = "black_litterman"
+
     config = _build_config(
         model=model, on_status=on_status,
         tool_registry=tool_registry, model_cache=model_cache,
+        optimizer_method=optimizer_method,
     )
 
     # Inject PM guidance and update non-serializable refs

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A multi-agent investment committee that runs five AI agents (Long Analyst, Short Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, preceded by an XAI pre-screen with Shapley value explanations, debates long/short theses, and produces a structured committee memo with a T signal and Black-Litterman optimized portfolio weights.
+A multi-agent investment committee that runs five AI agents (Long Analyst, Short Analyst, Risk Manager, Macro Strategist, Portfolio Manager) in parallel via LangGraph, preceded by an XAI pre-screen with Shapley value explanations, debates long/short theses, and produces a structured committee memo with a T signal and multi-strategy optimized portfolio weights (Black-Litterman, HRP, Mean-Variance, Min Variance, Risk Parity, Equal Weight, or Ensemble).
 
 ## Commands
 
@@ -18,8 +18,8 @@ cp .env.example .env  # then add API key(s)
 python app.py                    # Gradio UI at http://localhost:7860
 
 # Tests
-pytest tests/ -v                 # full suite (~603 tests)
-pytest tests/test_optimizer.py -v    # optimizer tests only
+pytest tests/ -v                 # full suite (~687 tests)
+pytest tests/test_optimizer.py tests/test_optimizer_strategies.py -v  # optimizer tests
 pytest tests/test_xai.py -v         # XAI module tests
 pytest tests/test_temperature.py -v  # temperature routing tests only
 pytest tests/ -k "test_name"     # single test by name
@@ -47,7 +47,7 @@ gather_data → run_xai_analysis → [sector_analyst, short_analyst, risk_manage
 - **Phase 1**: Four analyst agents run in parallel via LangGraph `Send()` fan-out (Long, Short, Risk, Macro)
 - **Phase 2**: Long vs Short adversarial debate with Risk Manager sizing commentary
 - **Phase 3**: PM synthesizes all evidence into `CommitteeMemo` with T signal
-- **Phase 4**: Black-Litterman optimizer computes real portfolio weights from PM output
+- **Phase 4**: Multi-strategy optimizer computes real portfolio weights (BL default, 5 alternatives, or Ensemble meta-strategy via UI dropdown)
 
 ### Key Patterns
 
@@ -67,13 +67,18 @@ gather_data → run_xai_analysis → [sector_analyst, short_analyst, risk_manage
 
 ### Optimizer Package
 
-`optimizer/` is a self-contained package:
-- `bl_optimizer.py`: Main pipeline (universe → covariance → views → BL model → efficient frontier → analytics)
-- `node.py`: LangGraph node that wraps the pipeline
+`optimizer/` is a self-contained package with 6 pluggable strategies + 1 ensemble meta-strategy:
+- `strategies.py`: `OptimizerStrategy` ABC + 6 implementations (Black-Litterman, HRP, Mean-Variance, Min Variance, Risk Parity, Equal Weight) + `STRATEGY_REGISTRY` + `get_strategy()` factory
+- `ensemble.py`: Ensemble meta-strategy — runs all 6 strategies on shared universe/covariance, produces cross-strategy analytics (consensus matrix, divergence flags, blended weights, layered narrative). Role assignments: BL=Core Allocation (35%), RP=Sanity Check (25%), MinVar=Defensive Overlay (20%), HRP/MV/EW=reference.
+- `bl_optimizer.py`: Shared pipeline dispatcher — `run_optimization()` (universe → covariance → strategy dispatch → analytics). `run_black_litterman()` kept as backward-compatible wrapper.
+- `node.py`: LangGraph node — reads `optimizer_method` from config, dispatches to `run_ensemble()` or `run_optimization()`
+- `models.py`: `OptimizationResult`, `OptimizerFallback`, `EnsembleResult`, `StrategyComparison`, `TickerConsensus`, `DivergenceFlag`, `FactorExposure`, `RiskContribution`
 - `views.py`: Extracts BL views (P, Q, omega) from PM output with regex parsing + confidence scaling
 - `universe.py`: Builds 7-8 asset universe from sector peers + ETFs via yfinance
 - `covariance.py`: Ledoit-Wolf shrinkage via `pypfopt.CovarianceShrinkage`
 - `analytics.py`: Sharpe/Sortino, OLS factor betas, MCTR risk decomposition
+
+Strategy selection: Gradio UI dropdown → `config["configurable"]["optimizer_method"]` → `run_optimization()` (or `run_ensemble()` for "ensemble"). Non-BL strategies skip view construction and run without PM memo. Ensemble builds universe/covariance once, loops all 6 strategies, and produces `EnsembleResult` with blended allocation + divergence analysis.
 
 ### XAI Package
 
@@ -150,7 +155,8 @@ Agent injection (in each agent's `act()` method):
 - Temperature tests verify kwarg passthrough and graceful fallback
 - XAI tests use mock fundamentals dicts (no API keys needed), 2 XGBoost tests skip if xgboost not installed
 - Vol intelligence tests use synthetic GBM prices (no API keys needed), 51 tests covering realized vol, IV vs HV, skew flags, regime multiplier, agent injection
-- Run `pytest tests/ -v` — expect ~603 passing, 0 skipped
+- Optimizer strategy tests use synthetic price data (7 tickers, 504 days), 43 tests covering all 6 strategies + dispatcher + backward compat
+- Run `pytest tests/ -v` — expect ~687 passing, 0 skipped
 
 ## Settings
 
@@ -158,4 +164,5 @@ All config via `config/settings.py` (Pydantic `BaseSettings`), loaded from `.env
 - `LLM_PROVIDER`: anthropic/google/openai/huggingface/ollama
 - `TEMPERATURE`: global default (0.7)
 - `task_temperatures`: per-node overrides (dict)
+- `OPTIMIZER_METHOD`: optimizer strategy key (default `black_litterman`; options: `hrp`, `mean_variance`, `min_variance`, `risk_parity`, `equal_weight`, `ensemble`)
 - Rate limiting: `RATE_LIMIT_RPM`, `RATE_LIMIT_INPUT_TPM`, `RATE_LIMIT_OUTPUT_TPM`

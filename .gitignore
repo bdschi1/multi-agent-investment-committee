@@ -74,3 +74,5 @@ evals/results/*.json
 
 # ── Claude Code project memory ────────────────────────────────
 .claude/
+
+HOW_IT_WORKS.md

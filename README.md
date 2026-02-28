@@ -594,6 +594,20 @@ pip install -e ".[bloomberg]"   # Bloomberg Terminal
 pip install -e ".[ibkr]"        # Interactive Brokers
 ```
 
+**MCP Connectors (Claude Code / Claude Cowork):** The repo includes a `.mcp.json` config that connects Claude Code sessions to external financial data providers via [MCP](https://modelcontextprotocol.io/). When working in Claude Code, these give the AI assistant access to market data, earnings transcripts, and news feeds alongside the Python tooling.
+
+| Provider | What It Provides |
+|----------|-----------------|
+| Daloopa | Structured financial data extraction |
+| Morningstar | Fund/stock data and ratings |
+| S&P Global (Capital IQ) | Fundamental data, estimates, transactions |
+| FactSet | Pricing, fundamentals, analytics |
+| LSEG (Refinitiv) | Fixed income, FX, equities, macro |
+| MT Newswires | Real-time financial news |
+| Aiera | Earnings call transcripts and events |
+
+Each connector requires an active subscription with the respective provider. If unavailable, connectors are silently ignored — no impact on other functionality.
+
 </details>
 
 <details>
@@ -738,15 +752,9 @@ This system draws on academic research in multi-agent financial AI, explainabili
 
 ## Contributing
 
-Contributions welcome. Areas for improvement:
-- Additional agent roles and analytical perspectives
-- New optimizer strategies and portfolio construction methods
-- Extended eval scenarios and ground truth cases
-- Enhanced vol intelligence and signal analytics
+Under active development. Contributions welcome — areas for improvement include agent roles, optimizer strategies, eval scenarios, and vol intelligence/signal analytics.
 
-## Status
-
-This project is under active, ongoing development. Core pipeline, agent architecture, optimizer, and XAI module are stable. New agent capabilities, optimization strategies, and evaluation scenarios are added as research needs evolve.
+***Curiosity compounds. Rigor endures.***
 
 ## License
 

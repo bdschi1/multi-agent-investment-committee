@@ -1,0 +1,116 @@
+# ===========================================================================
+# Mettler-Toledo — Quality Compounder with Pricing Power
+# ===========================================================================
+
+id: "mtd_precision_instruments"
+title: "Mettler-Toledo — Quality Compounder with Pricing Power"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "MTD"
+as_of_date: "2024-03-01"
+as_of_context: >
+  Mettler-Toledo is a global manufacturer of precision instruments and
+  services (~$3.8B revenue), serving laboratory, industrial, and food retail
+  end markets. Products include analytical balances, pipettes, titrators,
+  thermal analysis instruments, industrial scales, and product inspection
+  equipment. The stock trades at approximately $1,200, roughly 30-35x
+  forward P/E — consistently one of the most expensive names in the
+  life sciences tools and instruments sector. The company is known for its
+  "Stern Drive" operating model: rigorous pricing discipline, continuous
+  productivity improvement, and cost management that has driven operating
+  margin expansion from approximately 20% in 2010 to approximately 30% by
+  2024. Bull case: MTD is a best-in-class margin compounder with pricing
+  that consistently exceeds input costs, a highly fragmented competitive
+  landscape where scale matters, strong free cash flow generation deployed
+  into aggressive share repurchases, and a diversified end-market exposure
+  that smooths cyclicality. Bear case: the stock is among the most
+  expensive in the sector, China represents approximately 20% of revenue
+  and is experiencing a significant slowdown, industrial end markets are
+  cyclically exposed, and the "Stern Drive" margin expansion story may
+  be approaching its limits after a decade of improvement. Lab end markets
+  are seeing reduced capital spending from pharma and biotech customers.
+
+tags:
+  - precision_instruments
+  - life_sciences_tools
+  - quality_compounder
+  - pricing_power
+  - Stern_Drive
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [4.0, 6.0]
+  actual_outcome: >
+    MTD continued to execute on its Stern Drive operating model through 2024,
+    delivering margin expansion despite a challenging demand environment. China
+    remained a headwind but the company managed through it with pricing
+    discipline and cost controls. Industrial end markets were mixed. The stock
+    performed reasonably well as the market rewarded execution quality and
+    margin resilience, though the premium valuation limited the magnitude of
+    upside. The company's aggressive share repurchase program continued to
+    enhance per-share earnings growth.
+  actual_return_pct: 10.0
+  must_find_facts:
+    - "Stern Drive operating model drives pricing and productivity discipline"
+    - "operating margins have expanded from approximately 20% to approximately 30% over a decade"
+    - "China represents approximately 20% of revenue"
+    - "stock trades at approximately 30-35x forward P/E"
+    - "approximately $3.8B in revenue"
+    - "aggressive share repurchase program"
+    - "serves lab, industrial, and food retail end markets"
+  must_find_risks:
+    - "premium valuation (30-35x P/E) leaves limited margin for error"
+    - "China exposure (~20% of revenue) during a slowdown"
+    - "cyclical exposure to industrial end markets"
+    - "margin expansion may be approaching limits after a decade"
+    - "lab capital spending slowdown affecting instrument demand"
+    - "concentration risk — single-product categories (balances, pipettes)"
+  must_not_claim:
+    - "MTD is undervalued relative to peers"
+    - "China is not a significant risk"
+    - "margin expansion can continue at the same pace indefinitely"
+    - "MTD has no cyclical exposure"
+  expert_reasoning_sketch: >
+    MTD is the prototypical quality compounder — a company that earns its
+    premium valuation through consistent execution rather than growth rate.
+    The Stern Drive model is genuinely differentiated: few industrial
+    companies have the pricing discipline and organizational rigor to expand
+    margins continuously for a decade. The BUY thesis at 30-35x P/E is
+    not a valuation call — you are not buying MTD because it is cheap. You
+    are buying it because the compounding engine (pricing > input costs,
+    margin expansion, share repurchases) is likely to continue delivering
+    low-teens EPS growth on mid-single digit revenue growth, which justifies
+    the premium over time. The China headwind is real (~20% of revenue) but
+    manageable for a company with MTD's pricing power and cost discipline.
+    The bear case — that margins are near peak and the premium cannot be
+    sustained — has been made for five years and has been consistently
+    wrong. The conviction range is moderate (4-6) rather than high because
+    the starting valuation limits the magnitude of upside and any execution
+    miss at this multiple will be punished severely. This is a "pay fair for
+    great" thesis, not a "buy cheap" thesis.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Fails to understand the Stern Drive operating model and its role in margin expansion"
+    - "Dismisses the stock solely on valuation without analyzing the compounding dynamic"
+    - "Ignores China exposure as a risk factor"
+    - "Assumes margin expansion can continue at historical rates without bounds"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Tests whether the system can evaluate a quality compounder that trades at a sustained premium — understanding that expensive stocks can still be BUYs if the compounding engine justifies the multiple. The key analytical challenge is distinguishing between 'expensive' and 'overvalued' and evaluating whether a decade of margin expansion is sustainable. China exposure (~20% of revenue) provides a tangible risk to weigh against the quality thesis."

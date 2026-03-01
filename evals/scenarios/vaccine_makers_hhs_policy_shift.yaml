@@ -1,0 +1,149 @@
+# ===========================================================================
+# Vaccine Makers and HHS Policy Shift — Sector-Level Political Risk
+# ===========================================================================
+
+id: "vaccine_makers_hhs_policy_shift"
+title: "Vaccine Makers and HHS Policy Shift — Sector-Level Political Risk"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "PFE"
+as_of_date: "2025-09-01"
+as_of_context: >
+  The vaccine sector faces a confluence of political and public health
+  crosscurrents. PFE vaccine revenues have declined substantially —
+  Comirnaty (COVID) revenue has fallen from ~$37B (2022) to a ~$2-5B
+  annual run-rate, while Prevnar 20 (pneumococcal) generates ~$6B
+  annually but faces competitive risk post-2026. BNTX continues to operate
+  under its COVID vaccine partnership with Pfizer while independently
+  pursuing its own oncology and infectious disease pipeline. Across the
+  sector, MRK derives ~$8-9B annually from Gardasil (HPV vaccine), GSK
+  generates ~$4B from Shingrix (shingles), and SNY earns ~$3B from its
+  flu vaccine franchise.
+
+  The political environment has shifted: RFK Jr., now serving as HHS
+  Secretary, announced the formation of a "Make America Healthy Again"
+  (MAHA) commission to review federal health policy, including vaccine
+  recommendations and nutritional guidelines. Several state legislatures
+  have introduced bills to expand vaccine exemptions or weaken school-
+  entry vaccination requirements. Meanwhile, measles cases have risen in
+  communities with low vaccination rates — the CDC reported several
+  hundred cases in the first half of 2025, a notable increase from the
+  typical annual baseline of ~100-200 cases.
+
+  PFE specifically trades at ~$25-28 range, roughly 10-11x forward
+  earnings, with a ~6% dividend yield. The company is in the midst of a
+  cost-cutting program targeting ~$4B in savings. PFE's non-vaccine
+  portfolio includes oncology (Ibrance, Padcev via Seagen acquisition),
+  rare disease, and hospital products. The Seagen acquisition (~$43B)
+  added a promising oncology pipeline but also significant debt (~$60B
+  gross). Sell-side consensus on PFE is predominantly Hold, with limited
+  conviction in either direction.
+
+tags:
+  - healthcare
+  - vaccines
+  - political_risk
+  - sector_analysis
+  - pharma
+  - public_health
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 0
+  expected_recommendation_bucket: "HOLD"
+  conviction_range: [3.0, 5.0]
+  actual_outcome: >
+    As of the scenario date, the outcome is forward-looking. The expected
+    path is that vaccine sector headwinds from political rhetoric are real
+    but likely transient over a 2-3 year horizon. Institutional
+    independence of the FDA and CDC scientific staff, combined with the
+    self-correcting nature of infectious disease outbreaks (reduced
+    vaccination leads to outbreaks which restore public demand for
+    vaccines), creates a natural floor under the vaccine business. However,
+    near-term sentiment damage, potential coverage recommendation changes,
+    and legislative action at the state level create genuine uncertainty
+    about the timing and magnitude of revenue recovery. For PFE
+    specifically, the vaccine headwinds are real but represent only part
+    of the investment thesis — the Seagen oncology pipeline, cost-cutting
+    program, and dividend yield provide independent sources of value.
+  actual_return_pct: null
+  must_find_facts:
+    - "PFE Comirnaty revenue declined dramatically from ~$37B peak"
+    - "Prevnar 20 faces biosimilar risk beyond 2026"
+    - "RFK Jr. at HHS with MAHA commission reviewing health policy"
+    - "state legislatures introducing bills to expand vaccine exemptions"
+    - "measles cases rising in communities with low vaccination coverage"
+    - "PFE trading at ~10-11x forward earnings with ~6% dividend yield"
+    - "Seagen acquisition added oncology pipeline but also ~$60B in debt"
+    - "multiple vaccine makers exposed: MRK (Gardasil), GSK (Shingrix), SNY (flu)"
+  must_find_risks:
+    - "political rhetoric reducing public confidence in vaccines"
+    - "CDC recommendation changes could affect coverage and reimbursement"
+    - "state-level legislative risk to vaccine mandates"
+    - "PFE balance sheet leverage from Seagen acquisition"
+    - "Prevnar biosimilar competition timeline"
+    - "sector-wide vaccine revenue normalization post-COVID"
+    - "rising measles cases as both a risk indicator and potential catalyst reversal"
+  must_not_claim:
+    - "vaccines have been removed from the CDC recommended schedule"
+    - "PFE dividend has been cut"
+    - "federal law prohibits childhood vaccination"
+    - "RFK Jr. has banned specific vaccines"
+    - "Seagen acquisition has failed"
+    - "measles outbreaks have caused mass re-vaccination campaigns"
+  expert_reasoning_sketch: >
+    HOLD with moderate conviction. The vaccine sector faces genuine near-term
+    headwinds from the political environment, but the bear case overstates the
+    structural damage. Key analytical framework: (1) Demographics and disease
+    burden fundamentally support vaccine demand — aging populations need
+    shingles and pneumococcal vaccines regardless of political rhetoric, and
+    emerging markets represent a large growth opportunity. (2) The self-
+    correcting mechanism of infectious disease is important: reduced
+    vaccination coverage leads to outbreaks, which historically restore
+    public demand for vaccines and political support for immunization programs.
+    The measles cases already emerging in 2025 may accelerate this cycle.
+    (3) FDA and CDC scientific staff operate with substantial institutional
+    independence — political appointees can influence the pace and emphasis of
+    recommendations but have limited ability to override established scientific
+    consensus on vaccine safety and efficacy. (4) However, the near-term
+    headwinds are real: even without formal policy changes, reduced federal
+    enthusiasm for vaccination programs can affect state-level decisions,
+    insurance coverage policies, and public sentiment. This creates a
+    prolonged overhang that is difficult to time.
+
+    For PFE specifically, the vaccine headwinds must be weighed against the
+    broader thesis: the Seagen oncology pipeline provides a growth engine
+    independent of vaccine dynamics, the cost-cutting program supports margins,
+    and the ~6% dividend yield provides income while waiting. The debt load
+    from Seagen is a legitimate concern that limits financial flexibility.
+    The HOLD reflects the balance of forces — the stock is not expensive, but
+    the catalysts for re-rating are unclear and the political overhang may
+    persist. Neither the bull case (pipeline innovation overcomes political
+    noise) nor the bear case (vaccines are structurally impaired) has enough
+    evidence to warrant high conviction in either direction.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 30
+  critical_failures:
+    - "Ignores political/regulatory risk to the vaccine sector"
+    - "Treats vaccine political risk as permanent structural damage without nuance"
+    - "Fails to mention PFE's non-vaccine business (Seagen oncology pipeline)"
+    - "Ignores the self-correcting mechanism of outbreaks restoring vaccine demand"
+    - "Does not address balance sheet leverage from Seagen acquisition"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Hard sector-level scenario testing whether the committee can navigate political risk to a multi-product pharma company. The HOLD recommendation reflects genuine uncertainty — the system must avoid both dismissing political risk (bull trap) and catastrophizing it (bear trap). Tests the Macro Strategist on institutional resilience, the Risk Manager on sector concentration and balance sheet risk, and the PM on balancing competing thesis elements. The self-correcting mechanism of infectious disease outbreaks is a key insight that separates strong from weak analysis."

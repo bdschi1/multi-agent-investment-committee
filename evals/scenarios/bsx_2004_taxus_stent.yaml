@@ -1,0 +1,129 @@
+# ===========================================================================
+# Boston Scientific TAXUS Stent Approval — Buy the Rumor, Sell the News
+# ===========================================================================
+
+id: "bsx_2004_taxus_stent"
+title: "Boston Scientific TAXUS Stent Approval — Buy the Rumor, Sell the News"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "BSX"
+as_of_date: "2004-03-10"
+as_of_context: >
+  Boston Scientific received FDA approval for the TAXUS Express2
+  paclitaxel-eluting coronary stent on March 4, 2004. The drug-eluting
+  stent (DES) market was the hottest space in medical devices, with
+  Johnson & Johnson's Cypher (sirolimus-eluting) stent having been
+  approved in April 2003 and generating blockbuster sales. BSX stock
+  was trading around $40-43, near all-time highs, with a market cap
+  exceeding $35B. The bull thesis was straightforward: TAXUS was
+  expected to capture 50% or more of the rapidly growing DES market,
+  which some analysts projected could reach $5-6B annually. The
+  interventional cardiology community viewed DES as a paradigm shift
+  away from bare-metal stents, with dramatically lower restenosis
+  rates. BSX had invested heavily in the TAXUS program and the
+  commercial launch was the culmination of years of R&D. Consensus
+  sell-side estimates were overwhelmingly bullish, with most major
+  banks at Buy or Overweight. The stock had already appreciated
+  significantly in anticipation of the approval. Revenue for fiscal
+  2003 was approximately $3.5B. The company carried meaningful debt
+  from prior acquisitions.
+
+tags:
+  - medtech
+  - medical_devices
+  - catalyst_driven
+  - sell_the_news
+  - healthcare
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: -1
+  expected_recommendation_bucket: "HOLD"
+  conviction_range: [4.0, 6.0]
+  actual_outcome: >
+    The TAXUS approval marked the approximate top for BSX stock. While
+    TAXUS launched successfully and captured significant DES market share
+    as expected, the stock failed to sustain its highs. The "good news"
+    had been priced in. Over the following years, multiple headwinds
+    emerged: late stent thrombosis safety concerns surfaced in 2006
+    (the BASKET-LATE trial and other studies), raising questions about
+    the long-term safety profile of all drug-eluting stents; the DES
+    market growth rate decelerated as safety concerns prompted some
+    cardiologists to revert to bare-metal stents; BSX pursued the
+    disastrous $27B acquisition of Guidant in 2006, which was plagued
+    by device recalls and integration problems; and the company took
+    on massive debt to fund the acquisition. BSX stock declined from
+    its ~$43-44 peak to below $5 by 2009, a loss exceeding 85% over
+    approximately five years. The TAXUS approval was a classic "buy
+    the rumor, sell the news" event at a secular peak in the DES cycle.
+  actual_return_pct: -85.0  # approximate decline from ~$43 peak to below $5 over ~5 years
+  must_find_facts:
+    - "TAXUS Express2 FDA approval on March 4 2004"
+    - "drug-eluting stent market expected to reach several billion dollars"
+    - "J&J Cypher stent as primary competitor approved April 2003"
+    - "BSX stock near all-time highs around $40-43"
+    - "consensus sell-side estimates overwhelmingly bullish"
+    - "significant stock appreciation ahead of the approval"
+    - "company carried meaningful debt from prior acquisitions"
+  must_find_risks:
+    - "buy the rumor sell the news risk with approval already priced in"
+    - "DES market growth expectations may be overly optimistic"
+    - "competition from J&J Cypher and potential new entrants"
+    - "execution risk on TAXUS commercial launch and market share capture"
+    - "long-term safety data on drug-eluting stents still maturing"
+    - "valuation stretched at peak expectations"
+    - "balance sheet leverage from acquisition strategy"
+  must_not_claim:
+    - "late stent thrombosis has been identified as a safety concern"
+    - "BASKET-LATE trial results have been published"
+    - "BSX has acquired Guidant"
+    - "the DES market is declining"
+    - "TAXUS stent has been recalled"
+  expert_reasoning_sketch: >
+    This is a classic "sell the news" setup that tests whether the
+    committee can identify a potential top despite overwhelmingly
+    positive near-term fundamentals. The TAXUS approval was genuinely
+    positive for BSX, and the product did launch successfully. But
+    as of March 2004, the stock was priced for perfection after a
+    large run-up into the approval. The key analytical insight is
+    recognizing that when consensus is uniformly bullish and the
+    stock has already appreciated into a well-telegraphed catalyst,
+    the risk/reward skews negative regardless of the fundamental
+    quality. A sophisticated committee should note: (1) the catalyst
+    has arrived and is now in the price; (2) expectations for DES
+    market size may be at peak optimism; (3) any safety, competitive,
+    or execution disappointment would compress the multiple from
+    elevated levels; (4) BSX's acquisition-driven strategy and debt
+    load create additional downside risk. The appropriate call is
+    HOLD at best, with a lean toward reducing exposure — not a
+    high-conviction short (the near-term fundamentals are genuinely
+    strong), but recognition that the asymmetry has shifted
+    unfavorably. The difficulty is that this requires going against
+    a near-unanimous bullish consensus at a moment of apparent
+    fundamental strength.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 25
+    direction_accuracy: 25
+  critical_failures:
+    - "Recommends STRONG BUY at peak valuation"
+    - "Fails to identify sell-the-news risk after major catalyst"
+    - "Ignores valuation stretch at consensus peak optimism"
+    - "Claims late stent thrombosis data exists as of March 2004"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Hard scenario testing the system's ability to identify a potential top at a moment of peak fundamental optimism. The TAXUS approval was genuinely positive, but the stock had priced it in. Tests contrarian thinking, sell-the-news pattern recognition, and the ability to weigh valuation and positioning against fundamental strength. The subsequent ~85% decline over 5 years was driven by multiple factors (stent safety, Guidant acquisition, debt) that were not fully foreseeable in March 2004, but the stretched valuation and consensus positioning were visible at the time."

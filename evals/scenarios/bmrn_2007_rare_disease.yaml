@@ -1,0 +1,113 @@
+# ===========================================================================
+# BioMarin — Rare Disease Platform Ahead of Kuvan Approval
+# ===========================================================================
+
+id: "bmrn_2007_rare_disease"
+title: "BioMarin — Rare Disease Platform Ahead of Kuvan Approval"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "BMRN"
+as_of_date: "2007-08-01"
+as_of_context: >
+  BioMarin Pharmaceutical was a mid-cap biotech transitioning from
+  pure-play R&D to a commercial rare disease company. Naglazyme
+  (galsulfase), approved in 2005 for MPS VI (mucopolysaccharidosis VI),
+  was generating revenue and demonstrating the orphan drug commercial
+  model — small patient populations but high per-patient pricing
+  (~$300K+/year). Kuvan (sapropterin dihydrochloride), a first-in-class
+  oral therapy for phenylketonuria (PKU), had a PDUFA date approaching
+  in late 2007. PKU affects approximately 1 in 10,000-15,000 births in
+  the US, with an estimated ~16,500 diagnosed patients. Phase III data
+  showed statistically significant reductions in blood phenylalanine
+  levels. The stock traded in the ~$20-25 range with a market cap of
+  approximately $2-3B. BioMarin was still unprofitable on a GAAP basis,
+  burning cash to fund R&D and commercial infrastructure buildout.
+  The company had additional pipeline assets in development. The broader
+  biotech sector was in a relatively stable period before the 2008
+  financial crisis.
+
+tags:
+  - biotech
+  - rare_disease
+  - orphan_drug
+  - catalyst_driven
+  - healthcare
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 7.0]
+  actual_outcome: >
+    Kuvan was approved by the FDA in December 2007, making BioMarin one of
+    the few biotechs with two commercial rare disease products. Kuvan
+    launched successfully and BioMarin built it into a meaningful revenue
+    contributor. The company continued to expand its rare disease pipeline,
+    eventually adding Vimizim (MPS IVA, approved 2014), Brineura (CLN2,
+    approved 2017), and Palynziq (PKU, approved 2018). BioMarin became a
+    recognized rare disease platform company. Despite the 2008 financial
+    crisis causing broad biotech weakness, BioMarin's orphan drug revenue
+    proved relatively resilient given the non-discretionary nature of
+    enzyme replacement therapy. The stock appreciated meaningfully over
+    the following several years as the platform thesis played out.
+  actual_return_pct: 60.0  # approximate 2-year return through cycle
+  must_find_facts:
+    - "Naglazyme approved for MPS VI and generating commercial revenue"
+    - "Kuvan PDUFA date approaching for PKU indication"
+    - "PKU is a genetic metabolic disorder affecting approximately 1 in 10,000-15,000 births"
+    - "company still unprofitable on GAAP basis"
+    - "orphan drug pricing model with high per-patient revenue"
+    - "stock trading in approximately $20-25 range"
+  must_find_risks:
+    - "commercial execution risk on Kuvan launch"
+    - "continued GAAP losses and cash burn"
+    - "small addressable patient populations limit revenue ceiling"
+    - "FDA approval risk — PDUFA outcome uncertain"
+    - "biotech sector and broader market risk"
+    - "reimbursement and payer pushback risk on orphan drug pricing"
+  must_not_claim:
+    - "Kuvan has already been approved by the FDA"
+    - "BioMarin is profitable"
+    - "Vimizim or Palynziq are on the market"
+    - "the 2008 financial crisis has already occurred"
+    - "BioMarin has more than two commercial products"
+  expert_reasoning_sketch: >
+    Moderate-conviction BUY thesis on a rare disease platform in
+    transition. The investment case rested on several pillars: (1)
+    Naglazyme was already demonstrating the orphan drug commercial model
+    with high per-patient pricing and durable, annuity-like revenue;
+    (2) Kuvan represented a significant near-term catalyst with strong
+    Phase III data and an approaching PDUFA date; (3) the rare disease
+    space offered structural advantages including orphan drug exclusivity,
+    limited competition, high barriers to entry, and pricing power;
+    (4) BioMarin's pipeline suggested the potential to become a multi-
+    product rare disease platform. The key risks were binary FDA approval
+    risk on Kuvan, ongoing cash burn, and the inherent revenue ceiling
+    in small patient populations. A well-calibrated committee should
+    recognize that the risk/reward was favorable given the approaching
+    catalyst and the emerging platform thesis, while acknowledging the
+    legitimate concerns around profitability and execution.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Claims Kuvan is already approved as of August 2007"
+    - "Fails to identify orphan drug pricing as a key thesis component"
+    - "Ignores FDA approval risk as a material uncertainty"
+    - "Claims BioMarin is profitable"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Moderate difficulty healthcare scenario testing rare disease / orphan drug thesis construction. The system should identify the Kuvan PDUFA catalyst, understand the orphan drug commercial model, and weigh the platform thesis against binary FDA risk and ongoing cash burn. Tests healthcare domain knowledge and catalyst-driven analysis."

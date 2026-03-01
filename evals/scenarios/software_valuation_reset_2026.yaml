@@ -14,8 +14,8 @@ as_of_context: >
   Software stocks plunged 15% in one week and are down 29% from September
   2025 highs. Forward P/E compressed from 35x to 20x — the lowest absolute
   level since 2014. The premium to the average S&P 500 stock is at the
-  smallest gap since 2010. The catalyst was the announcement of Claude
-  Cowork and OpenAI's Frontier, AI agent orchestration platforms that raised
+  smallest gap since 2010. The catalyst was the launch of new AI agent
+  orchestration platforms from major AI labs that raised
   concerns traditional SaaS could be "relegated to passive data stores."
   However, current profit margins and consensus revenue growth estimates
   remain at highest levels in 20+ years, roughly 2x comparable S&P 500
@@ -59,7 +59,7 @@ ground_truth:
     - "software stocks down 29% from September 2025 highs"
     - "forward P/E compressed from 35x to 20x"
     - "lowest absolute P/E level since 2014"
-    - "Claude Cowork and OpenAI Frontier as catalysts"
+    - "AI agent orchestration platform launches as catalysts"
     - "profit margins and revenue growth at 20-year highs"
     - "GS Buy on MSFT ORCL NOW and Sell on ADBE DDOG"
     - "hedge funds reduced software exposure but remain net long"

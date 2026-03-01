@@ -71,6 +71,9 @@ class DataAggregator:
         # Compute vol intelligence (realized vol + implied vol + signals)
         vol_intel = _compute_vol_context(ticker, price_data)
 
+        # Fetch 13F fund conviction signals (from fund-tracker-13f bridge)
+        fund_conviction = _fetch_fund_conviction(ticker)
+
         context = {
             # Raw data
             "market_data": {
@@ -88,6 +91,9 @@ class DataAggregator:
             # Vol intelligence — quantitative vol analysis for agents
             "vol_intelligence": vol_intel,
 
+            # 13F fund conviction signals — hedge fund positioning from SEC filings
+            "fund_conviction": fund_conviction,
+
             # User input
             "user_context": user_context,
             "ticker": ticker,
@@ -98,15 +104,38 @@ class DataAggregator:
             regime_data = vol_intel.get("vol_regime_sizing", {})
             vol_regime = regime_data.get("regime", "N/A")
 
+        fund_avail = fund_conviction.get("available", False)
+        fund_sentiment = fund_conviction.get("net_sentiment", 0)
+        fund_count = fund_conviction.get("total_funds_holding", 0)
+
         logger.info(
             f"Context gathered for {ticker}: "
             f"{len(news_formatted)} news articles, "
             f"quality={quality.get('quality_label', 'N/A')}, "
             f"valuation={valuation.get('overall_valuation', 'N/A')}, "
-            f"vol_regime={vol_regime}"
+            f"vol_regime={vol_regime}, "
+            f"13f_signals={'available' if fund_avail else 'N/A'}"
+            f"{f' ({fund_count} funds, sentiment {fund_sentiment:+d})' if fund_avail else ''}"
         )
 
         return context
+
+
+def _fetch_fund_conviction(ticker: str) -> dict[str, Any]:
+    """Fetch 13F fund conviction signals via the fund-tracker-13f bridge.
+
+    Graceful fallback: returns an unavailable dict if fund-tracker is
+    not installed or the query fails. Never raises.
+    """
+    try:
+        from tools.fund_tracker_signals import get_fund_conviction_signals
+        return get_fund_conviction_signals(ticker)
+    except Exception as e:
+        logger.warning(f"Fund conviction signals unavailable for {ticker}: {e}")
+        return {
+            "available": False,
+            "summary": f"Fund conviction data unavailable: {e}",
+        }
 
 
 def _compute_vol_context(ticker: str, price_data: dict[str, Any]) -> dict[str, Any] | None:

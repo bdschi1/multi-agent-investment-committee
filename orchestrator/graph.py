@@ -19,11 +19,15 @@ Graph topology (full pipeline):
                                                           │
                                                    run_portfolio_manager
                                                           │
+                                                   run_aah_screening
+                                                          │
+                                                   run_optimizer
+                                                          │
                                                       finalize → END
 
 Phase C: Two-phase execution (HITL)
     Phase 1 graph: START → gather_data → run_xai_analysis → ... → report_debate_complete → END
-    Phase 2 graph: START → run_portfolio_manager → finalize → END
+    Phase 2 graph: START → run_portfolio_manager → run_aah_screening → run_optimizer → finalize → END
 """
 
 from __future__ import annotations
@@ -88,6 +92,7 @@ def build_graph() -> Any:
     graph.add_node("run_debate_round", nodes.run_debate_round)
     graph.add_node("report_debate_complete", nodes.report_debate_complete)
     graph.add_node("run_portfolio_manager", nodes.run_portfolio_manager)
+    graph.add_node("run_aah_screening", nodes.run_aah_screening)
     graph.add_node("run_optimizer", run_optimizer)
     graph.add_node("finalize", nodes.finalize)
 
@@ -126,8 +131,9 @@ def build_graph() -> Any:
     # ── Post-debate → PM ──
     graph.add_edge("report_debate_complete", "run_portfolio_manager")
 
-    # ── PM → Optimizer → Finalize → END ──
-    graph.add_edge("run_portfolio_manager", "run_optimizer")
+    # ── PM → AAH Screening → Optimizer → Finalize → END ──
+    graph.add_edge("run_portfolio_manager", "run_aah_screening")
+    graph.add_edge("run_aah_screening", "run_optimizer")
     graph.add_edge("run_optimizer", "finalize")
     graph.add_edge("finalize", END)
 
@@ -210,11 +216,13 @@ def build_graph_phase2() -> Any:
     graph = StateGraph(CommitteeState)
 
     graph.add_node("run_portfolio_manager", nodes.run_portfolio_manager)
+    graph.add_node("run_aah_screening", nodes.run_aah_screening)
     graph.add_node("run_optimizer", run_optimizer)
     graph.add_node("finalize", nodes.finalize)
 
     graph.add_edge(START, "run_portfolio_manager")
-    graph.add_edge("run_portfolio_manager", "run_optimizer")
+    graph.add_edge("run_portfolio_manager", "run_aah_screening")
+    graph.add_edge("run_aah_screening", "run_optimizer")
     graph.add_edge("run_optimizer", "finalize")
     graph.add_edge("finalize", END)
 
@@ -253,6 +261,7 @@ def _state_to_result(state: dict) -> CommitteeResult:
         risk_rebuttal=state.get("risk_rebuttal"),
         committee_memo=state.get("committee_memo"),
         optimization_result=state.get("optimization_result"),
+        aah_screening=state.get("aah_screening"),
         xai_result=xai_result,
         traces=state.get("traces", {}),
         conviction_timeline=state.get("conviction_timeline", []),

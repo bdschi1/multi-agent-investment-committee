@@ -1,0 +1,117 @@
+# ===========================================================================
+# Facebook Post-IPO Bear Case — Mobile Monetization Gap
+# ===========================================================================
+
+id: "fb_2012_bear_case"
+title: "Facebook Post-IPO Bear Case — Mobile Monetization Gap"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "FB"  # NOTE: ticker changed to META in June 2022; scenario uses original ticker
+as_of_date: "2012-07-20"
+as_of_context: >
+  Facebook went public on May 18, 2012 at $38/share in what was the largest
+  technology IPO in history at the time, valuing the company at ~$104B fully
+  diluted. The IPO was marred by NASDAQ technical glitches and immediate price
+  weakness. By mid-July the stock was trading around $30, down ~21% from the
+  IPO price. The core bear thesis centered on mobile monetization: Facebook
+  had disclosed in its S-1 that it generated essentially zero revenue from
+  mobile users, even as mobile usage was rapidly overtaking desktop. Zynga
+  accounted for approximately 15% of total revenue, creating concentration
+  risk. General Motors pulled ~$10M in Facebook advertising in May 2012,
+  publicly citing ad ineffectiveness — a high-profile vote of no confidence.
+  2011 total revenue was ~$3.71B. Q1 2012 revenue was ~$1.06B, down ~6.5%
+  sequentially from Q4 2011. GAAP net income was expected to turn negative
+  in Q2 2012 due to massive RSU-related stock compensation expense from the
+  IPO. A major lockup expiration on August 16 would release ~271M shares
+  into the float, with additional expirations through November 2012
+  releasing hundreds of millions more shares.
+
+tags:
+  - social_media
+  - post_ipo
+  - mobile_transition
+  - lockup_expiration
+  - contrarian
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: -1
+  expected_recommendation_bucket: "SELL"
+  conviction_range: [4.0, 6.0]
+  actual_outcome: >
+    The bear thesis was correct over the near term. FB stock declined from ~$30
+    in mid-July to a low of $17.55 on September 4, 2012, a further ~42% decline
+    driven by lockup expirations and continued mobile monetization concerns.
+    However, the bear thesis was ultimately wrong on a longer horizon. Facebook
+    launched mobile News Feed ads in late 2012 and mobile app install ads in
+    early 2013. By Q2 2013, mobile ad revenue accounted for 41% of total ad
+    revenue, up from near zero at IPO. The stock recovered to $38 (IPO price)
+    by July 31, 2013 and continued to appreciate significantly as mobile
+    monetization proved spectacularly successful. The near-term bear case was
+    vindicated, but anyone who stayed short beyond early 2013 was severely
+    penalized.
+  actual_return_pct: 42.0  # short-side gain from ~$30 to $17.55 over ~2 months
+  must_find_facts:
+    - "IPO price of $38 per share on May 18 2012"
+    - "essentially zero mobile ad revenue at time of IPO"
+    - "Zynga accounting for approximately 15% of total revenue"
+    - "GM pulled approximately $10M in Facebook ads citing ineffectiveness"
+    - "lockup expiration on August 16 releasing approximately 271M shares"
+    - "Q1 2012 revenue approximately $1.06B declining sequentially"
+    - "IPO valuation approximately $104B fully diluted"
+    - "GAAP net income expected to turn negative from RSU expense"
+  must_find_risks:
+    - "mobile monetization gap as user behavior shifted to mobile"
+    - "lockup expiration supply overhang through November 2012"
+    - "Zynga revenue concentration risk"
+    - "advertiser skepticism about Facebook ad effectiveness"
+    - "sequential revenue deceleration"
+    - "massive stock compensation expense distorting GAAP earnings"
+  must_not_claim:
+    - "Facebook has successfully monetized mobile"
+    - "mobile ad revenue is a meaningful contributor"
+    - "lockup expirations have already occurred"
+    - "GM has resumed advertising on Facebook"
+    - "Apple ATT is impacting Facebook ad targeting"
+  expert_reasoning_sketch: >
+    Legitimate near-term SELL/SHORT thesis. The mobile monetization gap was
+    a real structural risk — Facebook's user base was rapidly migrating to
+    mobile where the company had no ad product. The lockup expirations
+    created a well-telegraphed supply overhang that would pressure the stock
+    mechanically. Zynga revenue concentration, GM's public ad pull, and
+    sequential revenue deceleration all supported the bear case. At ~$30,
+    the stock was still trading at a demanding valuation for a company with
+    decelerating revenue and no mobile strategy. The difficulty of this
+    scenario is twofold: (1) going against the underwriter buy ratings and
+    retail sentiment that remained hopeful post-IPO, and (2) recognizing
+    that the bear thesis had a limited shelf life — Facebook's engineering
+    talent and user engagement suggested mobile monetization would likely
+    be solved eventually. A well-calibrated committee should identify this
+    as a moderate-conviction short with a defined time horizon tied to
+    lockup expirations, not a permanent impairment thesis.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 25
+    direction_accuracy: 25
+  critical_failures:
+    - "Fails to identify mobile monetization gap as the central risk"
+    - "Ignores lockup expiration supply overhang"
+    - "Recommends STRONG BUY at post-IPO levels"
+    - "Claims Facebook has meaningful mobile ad revenue as of July 2012"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Hard contrarian scenario testing the bear case on a high-profile IPO. The system should identify the mobile monetization gap and lockup expiration risks as the primary drivers. The nuance is that the near-term bear thesis was correct (stock fell to $17.55) but the long-term thesis was wrong (mobile monetization was eventually solved). Tests temporal awareness and ability to calibrate conviction with a time horizon."

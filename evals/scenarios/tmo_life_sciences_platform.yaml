@@ -1,0 +1,114 @@
+# ===========================================================================
+# Thermo Fisher Scientific — Post-COVID Life Sciences Platform Normalization
+# ===========================================================================
+
+id: "tmo_life_sciences_platform"
+title: "Thermo Fisher Scientific — Post-COVID Life Sciences Platform Normalization"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "TMO"
+as_of_date: "2023-06-15"
+as_of_context: >
+  TMO is the largest life sciences tools company by revenue (~$45B), built
+  through a series of transformative acquisitions (Life Technologies, Patheon,
+  PPD). The stock trades around $550, approximately 28x forward P/E. The
+  central question at this point is post-COVID normalization: COVID-related
+  revenue (~$9B at peak in 2021) is rolling off, and the market is
+  trying to determine what "normalized" organic growth looks like for the base
+  business. Management has guided to mid-single digit organic growth for the
+  core (ex-COVID) business, but consensus remains skeptical given the
+  destocking cycle in bioprocessing and the pullback in biotech funding. China
+  represents approximately 10-12% of revenue and is experiencing a government
+  anti-corruption campaign that is slowing procurement. The bull case rests on
+  the durability of biopharma R&D spending, successful integration of PPD
+  (clinical research) and Patheon (CDMO), and TMO's scale advantages in a
+  fragmented market. The bear case focuses on the magnitude of the COVID
+  revenue cliff, China exposure, biotech funding headwinds, and the risk that
+  base business growth is lower than the mid-single digit guide.
+
+tags:
+  - life_sciences_tools
+  - post_covid_normalization
+  - large_cap
+  - quality_compounder
+  - M_and_A_integration
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [5.0, 7.0]
+  actual_outcome: >
+    TMO's base business growth proved resilient through 2023-2024, with organic
+    revenue growth (ex-COVID) tracking in the mid-single digit range consistent
+    with management guidance. The bioprocessing destocking cycle bottomed in
+    late 2023 and began to recover. PPD and Patheon integrations progressed
+    well, contributing to margin expansion. China remained a headwind but did
+    not deteriorate further. The stock recovered from the mid-$400s trough to
+    above $600 by mid-2024 as the market gained confidence in the normalized
+    growth profile. TMO continued to execute on its capital deployment strategy
+    with bolt-on acquisitions.
+  actual_return_pct: 15.0
+  must_find_facts:
+    - "COVID-related revenue of ~$9B at peak is rolling off"
+    - "base business organic growth guided to mid-single digits"
+    - "China represents approximately 10-12% of revenue"
+    - "PPD and Patheon acquisitions expanding services capabilities"
+    - "bioprocessing destocking cycle affecting near-term growth"
+    - "largest life sciences tools company by revenue"
+    - "recurring revenue from consumables and services is a significant portion of total"
+  must_find_risks:
+    - "China anti-corruption campaign slowing procurement"
+    - "biotech funding pullback reducing demand from emerging biotech customers"
+    - "COVID revenue cliff creating difficult year-over-year comparisons"
+    - "bioprocessing destocking cycle duration uncertain"
+    - "integration risk from large acquisitions (PPD, Patheon)"
+    - "premium valuation (~28x forward P/E) requires execution"
+  must_not_claim:
+    - "COVID revenue has already fully normalized"
+    - "China is no longer a risk"
+    - "bioprocessing destocking is over"
+    - "TMO is trading at a discount to peers"
+  expert_reasoning_sketch: >
+    TMO at $550 and ~28x forward P/E is a quality compounder trading near
+    the lower end of its historical valuation range. The COVID revenue cliff
+    is well understood and largely priced in — the real question is whether
+    the base business can sustain mid-single digit organic growth. The
+    evidence supports this: pharma R&D spending is durable and growing,
+    TMO's consumables/services mix provides recurring revenue visibility,
+    and the PPD/Patheon acquisitions have expanded TMO's addressable market
+    into clinical research and CDMO. China is a genuine headwind but is
+    manageable at 10-12% of revenue and the anti-corruption campaign is
+    likely a transitory disruption rather than a structural impairment.
+    The biotech funding pullback affects the most cyclical portion of
+    demand (early-stage biotech instrument purchases) but not the pharma
+    R&D base that drives the majority of revenue. At 28x forward earnings,
+    the market is pricing in below-historical growth — any normalization
+    of the destocking cycle or stabilization in China provides upside to
+    consensus. The conviction is moderate (5-7) rather than high because
+    the near-term visibility on the COVID roll-off and China remains
+    limited, and the stock is not deeply cheap.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Fails to address the COVID revenue normalization dynamic"
+    - "Ignores China exposure and anti-corruption campaign risk"
+    - "Does not distinguish between base business growth and total revenue growth"
+    - "Treats the bioprocessing destocking cycle as permanent demand destruction"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Tests whether the system can parse a post-COVID normalization thesis in life sciences tools — separating the COVID revenue cliff (well understood, largely priced) from the base business growth trajectory (the real analytical question). Requires understanding of recurring revenue models, M&A integration, and the distinction between cyclical headwinds and structural impairment."

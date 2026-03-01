@@ -1,0 +1,130 @@
+# ===========================================================================
+# Moderna (MRNA) — Political/Regulatory Risk vs. Pipeline Optionality
+# ===========================================================================
+
+id: "mrna_political_regulatory_risk"
+title: "Moderna (MRNA) — Political/Regulatory Risk vs. Pipeline Optionality"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "hard"
+
+ticker: "MRNA"
+as_of_date: "2025-06-15"
+as_of_context: >
+  MRNA trades in the ~$30-40 range, down roughly 90% from its 2021 COVID
+  peak near $490. COVID booster revenue has declined sharply as the
+  pandemic shifted to endemic status — quarterly revenue run-rate has fallen
+  from ~$18B annualized (2022) to ~$3-4B (trailing). The company is burning
+  cash to fund an ambitious R&D pipeline spanning respiratory, oncology,
+  and rare disease programs. RFK Jr. has been confirmed as HHS Secretary
+  and has publicly expressed skepticism toward vaccines, though his
+  specific policy actions remain unclear. The CDC's Advisory Committee on
+  Immunization Practices (ACIP) is conducting routine reviews of vaccine
+  schedules, which some media outlets have characterized as politically
+  motivated. The FDA commissioner position is filled but operating under
+  heightened political scrutiny. Moderna's pipeline has delivered several
+  milestones: mRESVIA (RSV vaccine) received FDA approval in mid-2024,
+  the flu/COVID combination vaccine (mRNA-1083) showed positive Phase 3
+  data, and the cancer vaccine mRNA-4157/V940 (partnered with Merck) is
+  in Phase 3 for adjuvant melanoma following positive Phase 2b results
+  showing ~44% reduction in recurrence/death risk versus KEYTRUDA alone.
+  The company holds ~$8-10B in cash and investments. Sell-side consensus
+  is mixed — approximately 40% Buy, 30% Hold, 30% Sell — with wide price
+  target dispersion reflecting genuine uncertainty about pipeline
+  commercialization and the political environment.
+
+tags:
+  - healthcare
+  - vaccines
+  - biotech
+  - political_risk
+  - pipeline
+  - mrna_platform
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [4.0, 6.0]
+  actual_outcome: >
+    As of the scenario date, the outcome is forward-looking and uncertain.
+    The expected path is that political noise creates a buying opportunity
+    in a stock already priced for severe pessimism. FDA institutional
+    independence, while under pressure, has historically withstood political
+    interference on scientific matters. Pipeline catalysts (flu/COVID combo,
+    cancer vaccine Phase 3 data) provide potential re-rating events
+    independent of the political environment. However, the political
+    overhang may persist for multiple quarters, requiring patience.
+  actual_return_pct: null
+  must_find_facts:
+    - "stock down ~90% from COVID peak"
+    - "revenue declining as COVID boosters normalize"
+    - "RFK Jr. confirmed as HHS Secretary with vaccine-skeptic background"
+    - "mRESVIA (RSV vaccine) approved by FDA"
+    - "flu/COVID combo vaccine in late-stage development"
+    - "cancer vaccine mRNA-4157/V940 partnered with Merck in Phase 3"
+    - "company holds substantial cash reserves (~$8-10B)"
+    - "ACIP reviewing vaccine schedules"
+  must_find_risks:
+    - "political headwinds from HHS leadership skeptical of vaccines"
+    - "revenue trajectory still declining from COVID era"
+    - "cash burn on R&D pipeline with uncertain commercial outcomes"
+    - "CDC recommendation changes could affect vaccine coverage and uptake"
+    - "pipeline execution risk across multiple programs"
+    - "mRNA platform technology still has limited approved products"
+    - "potential for reduced public confidence in vaccines affecting demand"
+  must_not_claim:
+    - "FDA has changed its vaccine approval process"
+    - "CDC has removed vaccines from the recommended schedule"
+    - "MRNA revenue is currently growing"
+    - "the cancer vaccine has been approved"
+    - "RFK Jr. has blocked specific FDA approvals"
+    - "vaccine mandates have been eliminated nationally"
+  expert_reasoning_sketch: >
+    Cautious BUY at depressed levels. The stock is priced for a worst-case
+    scenario that likely overstates both the political risk and the pipeline
+    failure risk. Key analytical points: (1) FDA institutional independence
+    is deep-rooted — the agency has a career scientific staff and processes
+    that are resistant to political pressure on individual drug approvals.
+    Even under a vaccine-skeptic HHS Secretary, the FDA is unlikely to
+    reverse approvals of vaccines with established safety and efficacy data.
+    (2) Vaccine mandates are primarily state-level decisions, not federal —
+    HHS can influence CDC recommendations but cannot unilaterally eliminate
+    state school-entry requirements. (3) The pipeline optionality is
+    substantial: mRESVIA is approved and commercializing, the flu/COVID combo
+    addresses a large market opportunity, and the cancer vaccine partnership
+    with Merck represents a potentially transformative oncology platform.
+    (4) At ~$30-40/share with ~$8-10B in cash, the market is assigning
+    modest value to the pipeline, creating asymmetric risk/reward. (5) The
+    risk that prevents higher conviction is real: political rhetoric, even
+    without direct policy changes, can reduce vaccine uptake, suppress public
+    confidence, and create a hostile operating environment that weighs on
+    the stock for an extended period. Pipeline execution risk across
+    multiple programs is also genuine — not all candidates will succeed.
+    Position sizing should reflect both the asymmetric setup (depressed
+    price with pipeline catalysts) and the genuine uncertainty about the
+    political and commercial environment.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides:
+    risk_identification: 30
+  critical_failures:
+    - "Ignores political/regulatory risk from HHS leadership"
+    - "Fails to distinguish between FDA institutional independence and political rhetoric"
+    - "Treats the stock as a simple deep value buy without addressing pipeline execution risk"
+    - "Claims political risk is zero because FDA is independent"
+    - "Ignores the cash position and balance sheet context"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Hard scenario testing the intersection of political/regulatory risk and fundamental pipeline valuation. The committee must navigate genuine uncertainty about whether political rhetoric translates into policy action, while separately evaluating pipeline optionality at depressed valuations. Tests whether the system can hold two competing frameworks simultaneously: institutional resilience (FDA independence) vs. real-world impact of political sentiment on vaccine uptake and stock sentiment. Moderate conviction reflects the genuine difficulty of timing political risk resolution."

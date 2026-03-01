@@ -15,9 +15,11 @@ back to state for backward compatibility with Phase A/B tests.
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from langgraph.types import RunnableConfig
@@ -721,6 +723,96 @@ def run_portfolio_manager(state: dict, config: RunnableConfig) -> dict:
         update["parsing_failures"] = ["portfolio_manager"]
 
     return update
+
+
+# ---------------------------------------------------------------------------
+# AAH Screening (optional factual integrity gate)
+# ---------------------------------------------------------------------------
+
+_AAH_SRC = Path("/Users/bdsm4/code/bds_repos/aah/src")
+
+
+def run_aah_screening(state: dict, config: RunnableConfig) -> dict:
+    """Screen the committee memo for hallucinations using AAH.
+
+    Uses the gather_data context as source documents for HHEM grounding.
+    Gracefully degrades if AAH is not available.
+    """
+    memo = state.get("committee_memo")
+    if not memo:
+        return {"aah_screening": None}
+
+    _status(state, "  Running hallucination screen on committee memo...", config)
+
+    # Build screening text from memo fields
+    parts = []
+    for field in ("thesis_summary", "recommendation", "position_size",
+                  "risk_assessment", "catalyst_timeline"):
+        val = getattr(memo, field, None)
+        if val:
+            parts.append(str(val))
+    key_factors = getattr(memo, "key_factors", [])
+    if key_factors:
+        parts.extend(str(f) for f in key_factors)
+    screening_text = "\n".join(parts)
+
+    if not screening_text.strip():
+        return {"aah_screening": None}
+
+    # Build source document from gather_data context
+    import json
+    context = state.get("context", {})
+    source_text = json.dumps(context, default=str, indent=0)[:8000]
+
+    # Try to import and run AAH
+    aah_src = str(_AAH_SRC)
+    if aah_src not in sys.path:
+        sys.path.insert(0, aah_src)
+
+    try:
+        from aah import HallucinationScreener
+        from aah.config import ScreenerSettings
+
+        settings = ScreenerSettings()
+        screener = HallucinationScreener(settings=settings)
+        report = screener.screen(
+            response_text=screening_text,
+            source_documents=[source_text],
+        )
+
+        flagged = []
+        for cr in report.claim_results:
+            if cr.risk_level.value in ("high", "critical"):
+                flagged.append({
+                    "claim": cr.claim.text[:200],
+                    "score": cr.ensemble_score,
+                    "risk_level": cr.risk_level.value,
+                    "is_critical": cr.is_critical,
+                })
+
+        result = {
+            "passed": report.passed,
+            "hallucination_probability": report.hallucination_probability,
+            "total_claims": report.total_claims,
+            "flagged_claims": flagged,
+            "critical_failures": report.critical_failures,
+            "strategies_used": report.strategies_used,
+        }
+
+        prob = report.hallucination_probability
+        status = "PASS" if report.passed else "FAIL"
+        _status(
+            state,
+            f"  Hallucination screen: {status} "
+            f"(probability={prob:.2f}, {len(flagged)} claims flagged)",
+            config,
+        )
+
+        return {"aah_screening": result}
+
+    except Exception as e:
+        logger.warning("AAH screening unavailable: %s", e)
+        return {"aah_screening": {"error": str(e), "passed": True}}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,124 @@
+# ===========================================================================
+# Indian API Manufacturer — China+1 Supply Chain Thesis
+# ===========================================================================
+
+id: "indian_api_manufacturer_2024"
+title: "Indian API Manufacturer — China+1 Supply Chain Thesis"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "VDSP"  # NOTE: fictional company (Vedasyn Pharma) to avoid hallucination risk; representative of Indian API/CDMO sector
+as_of_date: "2024-07-15"
+as_of_context: >
+  Vedasyn Pharma (VDSP) is a fictional mid-cap Indian API (active
+  pharmaceutical ingredient) and CDMO (contract development and manufacturing
+  organization) with approximately $800M in annual revenue and ~25% EBITDA
+  margins. The company operates multiple FDA-approved manufacturing
+  facilities in Gujarat and Hyderabad. This scenario is representative of
+  the Indian API/CDMO sector broadly (companies like Divi's Laboratories,
+  Laurus Labs, Shilpa Medicare, PI Industries) rather than any single
+  company. The bull thesis centers on the China+1 supply chain
+  diversification trend accelerating in pharma. Global pharmaceutical
+  companies are actively reducing dependence on Chinese API suppliers due
+  to geopolitical risk, quality concerns, and regulatory pressure. The
+  US Biosecure Act (introduced in Congress, later signed into law in
+  December 2025 as part of the NDAA) specifically targets Chinese biotech companies with ties
+  to the Chinese government, creating a structural tailwind for Indian
+  manufacturers. India is the world's largest supplier of generic medicines
+  and a major API producer, with cost advantages over Western manufacturers
+  and improving quality infrastructure. However, the sector faces risks
+  including FDA inspection outcomes (several Indian facilities received
+  warning letters in 2023-2024), margin pressure from Chinese price
+  competition, INR/USD currency volatility, and corporate governance
+  concerns at some smaller players.
+
+tags:
+  - emerging_markets
+  - pharma
+  - supply_chain
+  - china_plus_one
+  - healthcare
+  - thematic
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 1
+  expected_recommendation_bucket: "BUY"
+  conviction_range: [4.0, 6.0]
+  actual_outcome: >
+    The Indian API/CDMO sector performed well through 2024 and into
+    2025. The US Biosecure Act was signed into law in December 2025,
+    providing a structural catalyst for Indian manufacturers as global
+    pharma companies accelerated supply chain diversification away from
+    China. Companies like Divi's Laboratories and Laurus Labs saw
+    increased order flows and improved visibility on multi-year contracts.
+    FDA inspection outcomes remained a stock-specific differentiator, with
+    companies maintaining clean compliance records outperforming those with
+    regulatory issues. The sector broadly benefited from the thematic
+    tailwind, though returns were uneven across individual names depending
+    on facility compliance, customer diversification, and margin profiles.
+  actual_return_pct: 25.0  # approximate sector return, illustrative
+  must_find_facts:
+    - "China+1 supply chain diversification trend in pharmaceuticals"
+    - "US Biosecure Act targeting Chinese biotech companies"
+    - "India as a major global API and generic medicine supplier"
+    - "FDA-approved manufacturing facilities as a competitive moat"
+    - "approximately 25% EBITDA margins"
+    - "cost advantage over Western manufacturers"
+  must_find_risks:
+    - "FDA inspection risk and recent warning letters at Indian facilities"
+    - "margin pressure from Chinese price competition"
+    - "INR/USD currency volatility"
+    - "corporate governance concerns in emerging market companies"
+    - "execution risk in scaling capacity to meet demand"
+    - "customer concentration risk if dependent on few large pharma buyers"
+    - "regulatory and political risk in India"
+  must_not_claim:
+    - "the Biosecure Act has already been signed into law as of July 2024"
+    - "Chinese API supply has been fully replaced by Indian manufacturers"
+    - "FDA inspection risk is immaterial for Indian facilities"
+    - "Vedasyn Pharma is a real publicly traded company"
+  expert_reasoning_sketch: >
+    Moderate-conviction BUY thesis on a structural supply chain shift.
+    The China+1 diversification trend in pharma APIs is a multi-year
+    secular theme driven by geopolitical tensions, regulatory pressure
+    (Biosecure Act), and quality concerns about Chinese manufacturing.
+    Indian API/CDMO companies are the primary beneficiaries given their
+    existing scale, FDA-approved facilities, and cost positioning. The
+    thesis is supported by observable order flow shifts and capacity
+    expansion announcements across the sector. However, conviction is
+    capped at moderate levels for several reasons: (1) FDA inspection
+    risk is real and idiosyncratic — a warning letter can wipe out
+    years of commercial progress; (2) Chinese competitors may respond
+    with price cuts, compressing margins; (3) emerging market governance
+    and accounting transparency remain legitimate concerns; (4) the
+    sector is already partially priced for the China+1 theme, limiting
+    upside surprise. A well-calibrated committee should recognize the
+    structural tailwind while appropriately discounting for the
+    execution and regulatory risks inherent in the Indian manufacturing
+    sector. This scenario uses a fictional company to test thematic
+    analysis capabilities without relying on specific financial data
+    that may be hallucinated.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Fails to identify China+1 supply chain shift as the primary thesis"
+    - "Ignores FDA inspection risk for Indian manufacturers"
+    - "Claims Biosecure Act is already law as of July 2024"
+    - "Treats Vedasyn Pharma as a real company with verifiable financials"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Moderate difficulty thematic scenario using a fictional Indian API manufacturer. Tests the system's ability to analyze supply chain themes (China+1), emerging market risks, and sector-level dynamics without relying on specific company financials that could be hallucinated. The fictional ticker VDSP is intentional — the system should analyze the sector thesis rather than attempting to fetch real market data for a nonexistent company."

@@ -90,6 +90,9 @@ class CommitteeState(TypedDict, total=False):
     # -- Phase 3b: Black-Litterman optimizer output --
     optimization_result: Any | None
 
+    # -- AAH hallucination screening --
+    aah_screening: dict[str, Any] | None
+
     # -- Parsing quality (tracks which agents had JSON parsing failures) --
     parsing_failures: Annotated[list[str], operator.add]
 

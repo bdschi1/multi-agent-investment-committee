@@ -80,7 +80,7 @@ evaluation_criteria:
   dimension_overrides:
     risk_identification: 30  # Risk identification is paramount for this scenario
     direction_accuracy: 30
-    fact_coverage: 10
+    fact_recall: 10
   critical_failures:
     - "Fails to mention interest rate risk on bond portfolio"
     - "Fails to flag depositor concentration"

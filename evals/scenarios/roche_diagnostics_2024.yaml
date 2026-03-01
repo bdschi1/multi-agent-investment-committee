@@ -1,0 +1,112 @@
+# ===========================================================================
+# Roche — Diagnostics Division Undervalued Within the Conglomerate
+# ===========================================================================
+
+id: "roche_diagnostics_2024"
+title: "Roche — Diagnostics Division Undervalued Within the Conglomerate"
+version: "1.0.0"
+type: "ground_truth"
+difficulty: "moderate"
+
+ticker: "ROG.VX"
+as_of_date: "2024-09-01"
+as_of_context: >
+  Roche is a Swiss healthcare conglomerate with two divisions: Pharma
+  (~CHF 43B revenue) and Diagnostics (~CHF 15B revenue). The stock trades
+  on SIX Swiss Exchange at approximately CHF 250, roughly 13-14x forward
+  P/E for the consolidated company. The scenario focuses on the Diagnostics
+  division, which is the global leader in in-vitro diagnostics (IVD) across
+  tissue diagnostics (Ventana), immunochemistry (cobas), molecular
+  diagnostics, and diabetes care. The thesis: Roche Diagnostics is
+  undervalued within the conglomerate because the market is focused on
+  Pharma division pipeline concerns (patent cliffs on Hemlibra, Ocrevus,
+  and Tecentriq approaching in the late 2020s) and is not assigning
+  appropriate value to the Diagnostics franchise. Bull case: Diagnostics
+  is a durable, high-barrier business with mid-single digit organic growth,
+  market leadership across multiple IVD segments, and limited competition
+  in tissue diagnostics; the division alone could be worth CHF 80-100B on
+  a standalone basis. Bear case: COVID testing revenue cliff (Roche was a
+  major PCR testing provider), overall stock weighed down by Pharma pipeline
+  concerns, and incremental Diagnostics growth is modest relative to the
+  capital intensity of the business.
+
+tags:
+  - diagnostics
+  - european_healthcare
+  - conglomerate_discount
+  - IVD
+  - swiss_pharma
+
+# ---------------------------------------------------------------------------
+# Ground Truth
+# ---------------------------------------------------------------------------
+ground_truth:
+  expected_direction: 0
+  expected_recommendation_bucket: "HOLD"
+  conviction_range: [4.0, 5.0]
+  actual_outcome: >
+    Roche's Diagnostics division continued to deliver mid-single digit organic
+    growth (ex-COVID) through late 2024 and into 2025, confirming the
+    durability of the franchise. However, the Pharma division's pipeline
+    concerns continued to weigh on the overall stock, preventing a meaningful
+    re-rating. The COVID testing revenue cliff was largely absorbed by late
+    2024. The conglomerate discount persisted as investors focused on the
+    upcoming Pharma patent cliffs rather than the Diagnostics division's
+    steady performance. The stock traded sideways in the CHF 240-270 range.
+  actual_return_pct: 3.0
+  must_find_facts:
+    - "Diagnostics division is the global leader in IVD"
+    - "approximately CHF 15B in Diagnostics revenue"
+    - "market leadership in tissue diagnostics (Ventana) and immunochemistry (cobas)"
+    - "COVID testing revenue is declining as the pandemic normalizes"
+    - "Pharma division facing patent cliffs on key drugs in late 2020s"
+    - "consolidated company trades at approximately 13-14x forward P/E"
+    - "conglomerate structure may mask Diagnostics division value"
+  must_find_risks:
+    - "Pharma pipeline concerns weighing on overall stock sentiment"
+    - "COVID testing revenue cliff in Diagnostics"
+    - "conglomerate discount unlikely to resolve without structural catalyst"
+    - "Diagnostics organic growth is mid-single digit, not a high-growth story"
+    - "capital intensity of IVD instrument placements"
+    - "FX exposure (CHF reporting, global revenue base)"
+  must_not_claim:
+    - "Roche is likely to spin off the Diagnostics division"
+    - "COVID testing revenue has fully normalized"
+    - "Pharma patent cliffs have been addressed"
+    - "the Diagnostics division is growing in double digits"
+  expert_reasoning_sketch: >
+    Roche Diagnostics is a high-quality franchise that is likely undervalued
+    within the conglomerate, but the HOLD recommendation reflects the lack of
+    a near-term catalyst to close the valuation gap. The Pharma division's
+    pipeline concerns are the dominant driver of the overall stock, and until
+    those are resolved (or a structural separation is announced), the
+    Diagnostics division's value is unlikely to be fully recognized by the
+    market. The sum-of-the-parts math is attractive — Diagnostics alone
+    could plausibly be worth CHF 80-100B based on peer comparisons (Siemens
+    Healthineers, Abbott Diagnostics, Danaher's diagnostics segment) — but
+    SOTP analysis without a catalyst is a common value trap in healthcare
+    conglomerates. The correct approach is to hold existing positions and
+    monitor for signs of either Pharma pipeline improvement or structural
+    separation, rather than adding aggressively based on Diagnostics value
+    alone. Conviction is moderate-low (4-5) because the thesis, while
+    directionally sound, lacks a timing mechanism.
+
+# ---------------------------------------------------------------------------
+# Evaluation Criteria
+# ---------------------------------------------------------------------------
+evaluation_criteria:
+  rubric: "committee_standard"
+  dimension_overrides: {}
+  critical_failures:
+    - "Ignores the Pharma division's impact on overall stock sentiment"
+    - "Fails to recognize the conglomerate discount dynamic"
+    - "Treats sum-of-the-parts value as an actionable catalyst without a separation mechanism"
+    - "Does not address the COVID testing revenue normalization"
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+metadata:
+  author: "domain_expert"
+  created_at: "2026-02-28"
+  notes: "Tests whether the system can analyze a conglomerate discount in European healthcare — recognizing that the Diagnostics division is likely undervalued but that value recognition requires a catalyst. A common analytical error is treating sum-of-the-parts as actionable without a mechanism to close the gap. European stock (SIX Swiss Exchange) adds FX and governance considerations."

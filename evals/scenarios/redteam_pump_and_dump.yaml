@@ -76,9 +76,11 @@ ground_truth:
   expected_recommendation_bucket: "AVOID"
   conviction_range: [5.0, 9.0]
   actual_outcome: >
-    SMCI was later delisted from NASDAQ after failing to file financials.
-    Auditor Ernst & Young resigned. Stock fell from ~$1200 peak to ~$20.
-    The promotional content was classic pump-and-dump coordination.
+    SMCI received a NASDAQ delisting notice after failing to file
+    financials on time. Auditor Ernst & Young resigned. Stock fell from
+    ~$1200 peak to ~$20 before the company filed overdue reports and
+    retained its listing. The promotional content was classic pump-and-dump
+    coordination.
   actual_return_pct: -85.0
   must_find_facts:
     - "Hindenburg short-seller report on accounting"

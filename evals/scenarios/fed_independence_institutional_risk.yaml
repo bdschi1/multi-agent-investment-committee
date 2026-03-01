@@ -42,7 +42,7 @@ tags:
 # Ground Truth
 # ---------------------------------------------------------------------------
 ground_truth:
-  expected_direction: -1
+  expected_direction: 1
   expected_recommendation_bucket: "BUY"
   conviction_range: [5.0, 8.0]
   actual_outcome: >

@@ -13,13 +13,13 @@ _RUBRICS_DIR = Path(__file__).parent.parent / "evals" / "rubrics"
 
 
 class TestLoadScenario:
-    def test_load_nvda(self):
-        path = _SCENARIOS_DIR / "nvda_2024_ai_boom.yaml"
+    def test_load_svb(self):
+        path = _SCENARIOS_DIR / "svb_2023_collapse.yaml"
         if not path.exists():
             pytest.skip("Scenario file not found")
         s = load_scenario(path)
-        assert s.id == "nvda_2024_ai_boom"
-        assert s.ticker == "NVDA"
+        assert s.id == "svb_2023_collapse"
+        assert s.ticker == "SIVB"
         assert s.type == "ground_truth"
 
     def test_load_adversarial(self):
@@ -37,7 +37,7 @@ class TestDiscoverScenarios:
         scenarios = discover_scenarios(_SCENARIOS_DIR)
         assert len(scenarios) >= 3  # at least nvda, svb, meta, adversarial
         ids = {s.id for s in scenarios}
-        assert "nvda_2024_ai_boom" in ids
+        assert "svb_2023_collapse" in ids
 
     def test_skips_templates(self):
         scenarios = discover_scenarios(_SCENARIOS_DIR)
@@ -62,9 +62,9 @@ class TestDiscoverScenarios:
             assert "AI" in s.tags
 
     def test_filter_by_scenario_id(self):
-        results = discover_scenarios(_SCENARIOS_DIR, filter_scenario="nvda")
+        results = discover_scenarios(_SCENARIOS_DIR, filter_scenario="svb")
         assert len(results) >= 1
-        assert all("nvda" in s.id for s in results)
+        assert all("svb" in s.id for s in results)
 
 
 class TestLoadRubric:

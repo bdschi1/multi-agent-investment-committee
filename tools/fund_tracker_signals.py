@@ -196,12 +196,11 @@ def _query_signals(ticker: str) -> dict[str, Any]:
                 elif h.shares_or_prn_amt > prior_holding.shares_or_prn_amt:
                     # Added to position
                     prior_shares = prior_holding.shares_or_prn_amt
-                    if prior_shares > 0:
-                        pct_change = (
-                            (h.shares_or_prn_amt - prior_shares) / prior_shares
-                        )
-                    else:
-                        pct_change = 1.0
+                    pct_change = (
+                        (h.shares_or_prn_amt - prior_shares) / prior_shares
+                        if prior_shares > 0
+                        else 1.0
+                    )
                     funds_added.append(fund_name)
                     if pct_change >= 0.50:
                         high_conviction_adds.append(fund_name)

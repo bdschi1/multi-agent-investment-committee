@@ -13,11 +13,11 @@ Usage:
     provider  = get_provider_safe("Bloomberg")  # falls back to Yahoo on error
 """
 
-from bds_data_providers.market_factory import (
-    get_market_provider as get_provider,
-    get_market_provider_safe as get_provider_safe,
+from bds_data_providers.market_factory import (  # noqa: I001
     available_market_providers as available_providers,
     clear_cache,
+    get_market_provider as get_provider,
+    get_market_provider_safe as get_provider_safe,
 )
 
 __all__ = ["get_provider", "get_provider_safe", "available_providers", "clear_cache"]

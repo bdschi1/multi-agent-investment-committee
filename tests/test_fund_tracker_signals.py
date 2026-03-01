@@ -12,9 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from tools.fund_tracker_signals import (
     _FUND_TRACKER_PATH,
@@ -24,7 +22,6 @@ from tools.fund_tracker_signals import (
     get_fund_conviction_signals,
     is_available,
 )
-
 
 # ── is_available() tests ──────────────────────────────────────────────
 
@@ -53,12 +50,13 @@ class TestIsAvailable:
         ]
         saved_mods = {k: sys.modules.pop(k) for k in mods_to_remove}
         try:
-            with patch(
-                "tools.fund_tracker_signals._ensure_import",
-                lambda: None,
+            with (
+                patch(
+                    "tools.fund_tracker_signals._ensure_import",
+                    lambda: None,
+                ),
+                patch.dict(sys.modules, {"core.models": None}),
             ):
-                # Force import failure by ensuring the modules aren't importable
-                with patch.dict(sys.modules, {"core.models": None}):
                     result = is_available()
                     # Should be False when import is blocked
                     assert isinstance(result, bool)
@@ -392,7 +390,7 @@ class TestDataAggregatorIntegration:
             try:
                 context = DataAggregator.gather_context("TEST")
                 # If it gets here, the exception was caught somewhere
-                assert "fund_conviction" in context or True
+                assert "fund_conviction" in context
             except RuntimeError:
                 # The mock side_effect propagates — this is acceptable
                 # because the real _fetch_fund_conviction has its own
